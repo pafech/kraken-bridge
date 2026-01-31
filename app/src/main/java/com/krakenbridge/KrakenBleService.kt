@@ -18,6 +18,9 @@ class KrakenBleService : Service() {
         const val NOTIFICATION_ID = 1
         const val CHANNEL_ID = "kraken_ble_channel"
 
+        @Volatile
+        private var instance: KrakenBleService? = null
+
         // Kraken housing BLE identifiers
         const val DEVICE_NAME = "Kraken"
         
@@ -61,9 +64,15 @@ class KrakenBleService : Service() {
     // Wake lock to keep device awake while connected
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var powerManager: PowerManager
-    
+
+    // Wake lock to keep screen on during video recording
+    private var videoRecordingWakeLock: PowerManager.WakeLock? = null
+
     // Camera mode tracking: false = photo, true = video
     private var isVideoMode = false
+
+    // Track if currently recording video
+    private var isRecording = false
     
     // App mode tracking: false = camera, true = gallery/photos
     private var isGalleryMode = false
@@ -197,16 +206,27 @@ class KrakenBleService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // Check if there's already an instance running
+        if (instance != null && instance != this) {
+            Log.w(TAG, "Another service instance detected - stopping old instance")
+            instance?.disconnect()
+        }
+        instance = this
+
         createNotificationChannel()
-        
+
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        Log.i(TAG, "Service instance created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_CONNECT -> {
+                // Reset all state flags when starting a new connection
+                resetState()
                 startForeground(NOTIFICATION_ID, createNotification("Connecting..."))
                 startScan()
             }
@@ -217,11 +237,24 @@ class KrakenBleService : Service() {
         return START_STICKY
     }
 
+    private fun resetState() {
+        cameraIsOpen = false
+        isVideoMode = false
+        isRecording = false
+        isGalleryMode = false
+        releaseVideoRecordingWakeLock()
+        Log.i(TAG, "State reset: all flags cleared")
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
         super.onDestroy()
+        if (instance == this) {
+            instance = null
+        }
         disconnect()
+        Log.i(TAG, "Service instance destroyed")
     }
 
     private fun createNotificationChannel() {
@@ -351,8 +384,17 @@ class KrakenBleService : Service() {
                     Log.i(TAG, "Shutter pressed -> opened camera (first press)")
                 } else if (isVideoMode) {
                     // Video mode: toggle recording
+                    isRecording = !isRecording
+                    if (isRecording) {
+                        // Starting video recording - keep screen on
+                        acquireVideoRecordingWakeLock()
+                        Log.i(TAG, "Shutter pressed -> starting video recording")
+                    } else {
+                        // Stopping video recording - release wake lock
+                        releaseVideoRecordingWakeLock()
+                        Log.i(TAG, "Shutter pressed -> stopping video recording")
+                    }
                     injectKeyEvent(KeyEvent.KEYCODE_CAMERA)
-                    Log.i(TAG, "Shutter pressed -> toggle video recording")
                 } else {
                     // Photo mode: take photo
                     injectKeyEvent(KeyEvent.KEYCODE_CAMERA)
@@ -413,8 +455,14 @@ class KrakenBleService : Service() {
     }
     
     private fun toggleGalleryMode() {
+        // If switching away from camera while recording, release wake lock
+        if (isRecording) {
+            isRecording = false
+            releaseVideoRecordingWakeLock()
+        }
+
         isGalleryMode = !isGalleryMode
-        
+
         if (isGalleryMode) {
             cameraIsOpen = false
             openPhotosApp()
@@ -462,13 +510,19 @@ class KrakenBleService : Service() {
     }
     
     private fun toggleCameraMode() {
+        // If switching away from video mode while recording, release wake lock
+        if (isRecording) {
+            isRecording = false
+            releaseVideoRecordingWakeLock()
+        }
+
         isVideoMode = !isVideoMode
         val modeName = if (isVideoMode) "VIDEO" else "PHOTO"
         Log.i(TAG, "Fn pressed -> switching to $modeName mode")
-        
+
         // Open camera first
         openCamera()
-        
+
         // Then swipe to switch mode
         handler.postDelayed({
             swipeToSwitchCameraMode(isVideoMode)
@@ -515,15 +569,15 @@ class KrakenBleService : Service() {
     private fun wakeScreen() {
         @Suppress("DEPRECATION")
         val screenWakeLock = powerManager.newWakeLock(
-            PowerManager.FULL_WAKE_LOCK or 
-            PowerManager.ACQUIRE_CAUSES_WAKEUP or 
+            PowerManager.FULL_WAKE_LOCK or
+            PowerManager.ACQUIRE_CAUSES_WAKEUP or
             PowerManager.ON_AFTER_RELEASE,
             "KrakenBridge:ScreenWake"
         )
-        screenWakeLock.acquire(3000)
+        screenWakeLock.acquire(30000)
         handler.postDelayed({
             if (screenWakeLock.isHeld) screenWakeLock.release()
-        }, 3000)
+        }, 30000)
     }
     
     private fun openCamera() {
@@ -565,6 +619,27 @@ class KrakenBleService : Service() {
             if (it.isHeld) {
                 it.release()
                 Log.i(TAG, "Connection wake lock released")
+            }
+        }
+    }
+
+    private fun acquireVideoRecordingWakeLock() {
+        if (videoRecordingWakeLock == null) {
+            @Suppress("DEPRECATION")
+            videoRecordingWakeLock = powerManager.newWakeLock(
+                PowerManager.SCREEN_DIM_WAKE_LOCK,
+                "KrakenBridge:VideoRecording"
+            )
+        }
+        videoRecordingWakeLock?.acquire(60 * 60 * 1000L) // 1 hour max for a single video
+        Log.i(TAG, "Video recording wake lock acquired - screen will stay on")
+    }
+
+    private fun releaseVideoRecordingWakeLock() {
+        videoRecordingWakeLock?.let {
+            if (it.isHeld) {
+                it.release()
+                Log.i(TAG, "Video recording wake lock released")
             }
         }
     }
@@ -640,9 +715,11 @@ class KrakenBleService : Service() {
         isUserDisconnect = true
         cameraIsOpen = false
         isGalleryMode = false
+        isRecording = false
         stopScan()
         stopConnectionMonitoring()
         releaseConnectionWakeLock()
+        releaseVideoRecordingWakeLock()
         bluetoothGatt?.let {
             it.disconnect()
             it.close()

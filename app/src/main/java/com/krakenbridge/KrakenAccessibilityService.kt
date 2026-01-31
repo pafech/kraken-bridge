@@ -187,10 +187,10 @@ class KrakenAccessibilityService : AccessibilityService() {
     
     private fun dispatchShutterTap() {
         // Tap the shutter button (big white circle) in Google Camera
-        // Based on screenshot: shutter is at approximately 73% from top, center
+        // Based on user measurements: shutter is at approximately 83% from top, center
         val x = screenWidth / 2f
-        val y = screenHeight * 0.73f
-        
+        val y = screenHeight * 0.83f
+
         Log.i(TAG, "Tapping shutter at ($x, $y)")
         dispatchTap(x, y)
     }
@@ -298,20 +298,20 @@ class KrakenAccessibilityService : AccessibilityService() {
      * Delete step 2: Tap trash icon (far right edge of control bar)
      */
     fun deleteStep2_TapTrash() {
-        val trashX = screenWidth * 0.95f
-        val trashY = screenHeight * 0.94f
+        val trashX = screenWidth * 0.875f
+        val trashY = screenHeight * 1.034f
         Log.i(TAG, "Delete step 2: Tapping trash at ($trashX, $trashY)")
         dispatchTap(trashX, trashY)
     }
-    
+
     /**
      * Delete step 3: Tap "Move to trash" button - same position as trash icon
      * The confirm button spans full width so tapping far right works
      */
     fun deleteStep3_Confirm() {
         // Same position as trash icon - will hit confirm button when drawer is open
-        val confirmX = screenWidth * 0.95f
-        val confirmY = screenHeight * 0.94f
+        val confirmX = screenWidth * 0.875f
+        val confirmY = screenHeight * 1.034f
         Log.i(TAG, "Delete step 3: Confirming at ($confirmX, $confirmY)")
         dispatchTap(confirmX, confirmY)
     }
@@ -341,12 +341,12 @@ class KrakenAccessibilityService : AccessibilityService() {
      * @param toVideo true = tap video icon, false = tap photo icon
      */
     fun dispatchModeSwipeGesture(toVideo: Boolean) {
-        // Based on screenshot: the photo/video icons are in the bottom row
-        // Just above the system navigation bar, approximately 91% from top
+        // Based on user measurements: photo/video icons are at the very bottom
+        // At approximately 101% from top (essentially at screen bottom)
         // Layout: [icon] [camera icon] [video icon] [settings]
-        
-        val y = screenHeight * 0.91f
-        
+
+        val y = screenHeight * 1.01f
+
         val x: Float = if (toVideo) {
             // Tap on video icon - slightly right of center
             screenWidth * 0.55f
@@ -354,7 +354,7 @@ class KrakenAccessibilityService : AccessibilityService() {
             // Tap on photo/camera icon - slightly left of center
             screenWidth * 0.45f
         }
-        
+
         Log.i(TAG, "Tapping photo/video icon at ($x, $y) for ${if (toVideo) "VIDEO" else "PHOTO"}")
         dispatchTap(x, y)
     }
