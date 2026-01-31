@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kraken Bridge</string>
+    <string name="accessibility_service_description">Kraken Bridge uses this service to send button presses from your Kraken dive housing to control camera apps. This allows the shutter, zoom, and other buttons on the housing to trigger actions in your camera app.</string>
+</resources>
