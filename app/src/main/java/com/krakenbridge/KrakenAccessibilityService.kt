@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Path
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
@@ -17,6 +18,7 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 
 enum class FocusZone {
     NEAR,    // Bottom of viewfinder - focus on close objects
@@ -66,11 +68,125 @@ class KrakenAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Find an AccessibilityNodeInfo by resource ID
+     * @param resourceId The full resource ID (e.g., "com.google.android.GoogleCamera:id/shutter_button")
+     * @return The first matching node, or null if not found
+     */
+    private fun findNodeByResourceId(resourceId: String): AccessibilityNodeInfo? {
+        val root = rootInActiveWindow ?: run {
+            Log.w(TAG, "No active window root")
+            return null
+        }
+
+        val nodes = root.findAccessibilityNodeInfosByViewId(resourceId)
+        return if (nodes.isNotEmpty()) {
+            Log.d(TAG, "Found node with resource ID: $resourceId")
+            nodes[0]
+        } else {
+            Log.w(TAG, "No node found with resource ID: $resourceId")
+            null
+        }
+    }
+
+    /**
+     * Find an AccessibilityNodeInfo by content description
+     * @param contentDesc The content description to search for
+     * @param exactMatch If true, requires exact match; if false, uses contains matching
+     * @return The first matching node, or null if not found
+     */
+    private fun findNodeByContentDescription(contentDesc: String, exactMatch: Boolean = false): AccessibilityNodeInfo? {
+        val root = rootInActiveWindow ?: run {
+            Log.w(TAG, "No active window root")
+            return null
+        }
+
+        return findNodeByContentDescriptionRecursive(root, contentDesc, exactMatch)
+    }
+
+    /**
+     * Recursively search for a node by content description
+     */
+    private fun findNodeByContentDescriptionRecursive(
+        node: AccessibilityNodeInfo?,
+        contentDesc: String,
+        exactMatch: Boolean
+    ): AccessibilityNodeInfo? {
+        if (node == null) return null
+
+        val nodeContentDesc = node.contentDescription?.toString()
+        if (nodeContentDesc != null) {
+            val matches = if (exactMatch) {
+                nodeContentDesc == contentDesc
+            } else {
+                nodeContentDesc.contains(contentDesc, ignoreCase = true)
+            }
+
+            if (matches) {
+                Log.d(TAG, "Found node with content description: $nodeContentDesc")
+                return node
+            }
+        }
+
+        // Search children
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            val result = findNodeByContentDescriptionRecursive(child, contentDesc, exactMatch)
+            if (result != null) {
+                return result
+            }
+        }
+
+        return null
+    }
+
+    /**
+     * Click on an AccessibilityNodeInfo
+     * @return true if click was performed successfully
+     */
+    private fun clickNode(node: AccessibilityNodeInfo?): Boolean {
+        if (node == null) {
+            Log.w(TAG, "Cannot click null node")
+            return false
+        }
+
+        if (!node.isClickable) {
+            Log.w(TAG, "Node is not clickable: ${node.viewIdResourceName}")
+            // Try clicking anyway - some nodes report as non-clickable but still work
+        }
+
+        val result = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        if (result) {
+            Log.i(TAG, "Successfully clicked node: ${node.viewIdResourceName ?: node.contentDescription}")
+        } else {
+            Log.w(TAG, "Failed to click node: ${node.viewIdResourceName ?: node.contentDescription}")
+        }
+        return result
+    }
+
+    /**
+     * Get the center coordinates of a node's bounds on screen
+     */
+    private fun getNodeCenter(node: AccessibilityNodeInfo): Pair<Float, Float>? {
+        val rect = Rect()
+        node.getBoundsInScreen(rect)
+
+        if (rect.isEmpty) {
+            Log.w(TAG, "Node has empty bounds")
+            return null
+        }
+
+        val centerX = rect.exactCenterX()
+        val centerY = rect.exactCenterY()
+        Log.d(TAG, "Node center: ($centerX, $centerY), bounds: $rect")
+        return Pair(centerX, centerY)
+    }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        
+
         // Get screen dimensions for gesture dispatch
         val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val metrics = DisplayMetrics()
@@ -78,8 +194,8 @@ class KrakenAccessibilityService : AccessibilityService() {
         windowManager.defaultDisplay.getMetrics(metrics)
         screenWidth = metrics.widthPixels
         screenHeight = metrics.heightPixels
-        
-        Log.i(TAG, "Accessibility service created, screen: ${screenWidth}x${screenHeight}")
+
+        Log.i(TAG, "Accessibility service v${BuildInfo.VERSION} created, screen: ${screenWidth}x${screenHeight}")
     }
 
     override fun onServiceConnected() {
@@ -186,29 +302,51 @@ class KrakenAccessibilityService : AccessibilityService() {
     }
     
     private fun dispatchShutterTap() {
-        // Tap the shutter button (big white circle) in Google Camera
-        // Based on user measurements: shutter is at approximately 83% from top, center
-        val x = screenWidth / 2f
-        val y = screenHeight * 0.83f
+        // Try to find shutter button by resource ID first
+        var node = findNodeByResourceId("com.google.android.GoogleCamera:id/shutter_button")
 
-        Log.i(TAG, "Tapping shutter at ($x, $y)")
-        dispatchTap(x, y)
+        // Fallback: try by content description (contains "photo" or "video")
+        if (node == null) {
+            node = findNodeByContentDescription("photo", exactMatch = false)
+                ?: findNodeByContentDescription("video", exactMatch = false)
+        }
+
+        if (node != null) {
+            // Try to click the node directly
+            if (!clickNode(node)) {
+                // If direct click fails, try tapping at node's center coordinates
+                getNodeCenter(node)?.let { (x, y) ->
+                    Log.i(TAG, "Direct click failed, tapping shutter at node center ($x, $y)")
+                    dispatchTap(x, y)
+                }
+            }
+        } else {
+            // Last resort fallback: use hardcoded coordinates
+            Log.w(TAG, "Could not find shutter button, using fallback coordinates")
+            val x = screenWidth / 2f
+            val y = screenHeight * 0.83f
+            Log.i(TAG, "Tapping shutter at fallback position ($x, $y)")
+            dispatchTap(x, y)
+        }
     }
     
     private fun dispatchFocusTap(zone: FocusZone) {
         // Tap different areas of the viewfinder to set focus
-        // Based on screenshot: viewfinder is from ~3% to ~60% from top (above zoom controls)
+        // NOTE: This intentionally uses coordinates because we're tapping specific areas
+        // of the camera viewfinder itself (not UI buttons). The viewfinder doesn't have
+        // accessibility nodes for "top", "center", "bottom" - we tap arbitrary points
+        // to trigger focus at different depths.
         val x = screenWidth / 2f
         val viewfinderTop = screenHeight * 0.05f
         val viewfinderBottom = screenHeight * 0.58f
         val viewfinderHeight = viewfinderBottom - viewfinderTop
-        
+
         val y = when (zone) {
             FocusZone.NEAR -> viewfinderBottom - (viewfinderHeight * 0.15f)   // Bottom of viewfinder
             FocusZone.CENTER -> viewfinderTop + (viewfinderHeight * 0.5f)     // Center of viewfinder
             FocusZone.FAR -> viewfinderTop + (viewfinderHeight * 0.15f)       // Top of viewfinder
         }
-        
+
         Log.i(TAG, "Focus tap at zone $zone: ($x, $y)")
         dispatchTap(x, y)
     }
@@ -233,6 +371,35 @@ class KrakenAccessibilityService : AccessibilityService() {
         }, null)
     }
     
+    /**
+     * Open the photo gallery by clicking the thumbnail button
+     */
+    fun openGallery() {
+        Log.i(TAG, "Opening gallery")
+
+        // Try to find the thumbnail/gallery button by resource ID
+        var node = findNodeByResourceId("com.google.android.GoogleCamera:id/thumbnail_button")
+
+        // Fallback: try by content description
+        if (node == null) {
+            node = findNodeByContentDescription("gallery", exactMatch = false)
+                ?: findNodeByContentDescription("photo gallery", exactMatch = false)
+        }
+
+        if (node != null) {
+            // Try to click the node directly
+            if (!clickNode(node)) {
+                // If direct click fails, try tapping at node's center coordinates
+                getNodeCenter(node)?.let { (x, y) ->
+                    Log.i(TAG, "Direct click failed, tapping gallery button at ($x, $y)")
+                    dispatchTap(x, y)
+                }
+            }
+        } else {
+            Log.w(TAG, "Could not find gallery button - may already be in gallery or button not visible")
+        }
+    }
+
     /**
      * Swipe left/right to navigate photos in Google Photos
      * @param next true = swipe left (next photo), false = swipe right (previous photo)
@@ -272,91 +439,190 @@ class KrakenAccessibilityService : AccessibilityService() {
         }, null)
     }
     
+    // ==================== Google Photos Functions ====================
+
     /**
      * Tap on the most recent photo in Google Photos grid view (top-left area)
-     * Based on screenshot: first photo at ~12% left, ~24% top
+     * TODO: Could be improved with accessibility if we can identify the first photo
+     * in the grid view, but coordinate-based works well enough for this use case
      */
     fun tapRecentPhoto() {
         val x = screenWidth * 0.12f
         val y = screenHeight * 0.24f
-        
+
         Log.i(TAG, "Tapping recent photo at ($x, $y)")
         dispatchTap(x, y)
     }
-    
-    /**
-     * Delete step 1: Tap screen to show controls (if hidden)
-     */
-    fun deleteStep1_ShowControls() {
-        val centerX = screenWidth * 0.5f
-        val centerY = screenHeight * 0.5f
-        Log.i(TAG, "Delete step 1: Showing controls at ($centerX, $centerY)")
-        dispatchTap(centerX, centerY)
-    }
-    
-    /**
-     * Delete step 2: Tap trash icon (far right edge of control bar)
-     */
-    fun deleteStep2_TapTrash() {
-        val trashX = screenWidth * 0.875f
-        val trashY = screenHeight * 1.034f
-        Log.i(TAG, "Delete step 2: Tapping trash at ($trashX, $trashY)")
-        dispatchTap(trashX, trashY)
-    }
 
     /**
-     * Delete step 3: Tap "Move to trash" button - same position as trash icon
-     * The confirm button spans full width so tapping far right works
+     * Click the trash/bin button in Google Photos single photo view
+     * Tries accessibility first, falls back to coordinates
      */
-    fun deleteStep3_Confirm() {
-        // Same position as trash icon - will hit confirm button when drawer is open
-        val confirmX = screenWidth * 0.875f
-        val confirmY = screenHeight * 1.034f
-        Log.i(TAG, "Delete step 3: Confirming at ($confirmX, $confirmY)")
-        dispatchTap(confirmX, confirmY)
-    }
-    
-    /**
-     * Quick delete - ensure controls visible, tap trash, then confirm
-     */
-    fun dispatchQuickDelete() {
-        Log.i(TAG, "Quick delete: show controls + trash + confirm")
-        
-        // First: tap center to ensure controls are visible
-        deleteStep1_ShowControls()
-        
-        // Second: tap trash icon (after controls appear)
-        handler.postDelayed({
-            deleteStep2_TapTrash()
-        }, 400)
-        
-        // Third: tap confirm button in drawer (wait longer for drawer to open)
-        handler.postDelayed({
-            deleteStep3_Confirm()
-        }, 1500)
-    }
-    
-    /**
-     * Tap on photo/video toggle icons at the bottom of Google Camera
-     * @param toVideo true = tap video icon, false = tap photo icon
-     */
-    fun dispatchModeSwipeGesture(toVideo: Boolean) {
-        // Based on user measurements: photo/video icons are at the very bottom
-        // At approximately 101% from top (essentially at screen bottom)
-        // Layout: [icon] [camera icon] [video icon] [settings]
+    private fun clickTrashButton(): Boolean {
+        Log.i(TAG, "Looking for trash button")
 
-        val y = screenHeight * 1.01f
+        // Try to find trash button by resource ID
+        var node = findNodeByResourceId("com.google.android.apps.photos:id/trash")
 
-        val x: Float = if (toVideo) {
-            // Tap on video icon - slightly right of center
-            screenWidth * 0.55f
-        } else {
-            // Tap on photo/camera icon - slightly left of center
-            screenWidth * 0.45f
+        // Fallback: try by content description
+        if (node == null) {
+            Log.d(TAG, "Trash not found by ID, trying content description")
+            node = findNodeByContentDescription("Bin", exactMatch = false)
+                ?: findNodeByContentDescription("Trash", exactMatch = false)
         }
 
-        Log.i(TAG, "Tapping photo/video icon at ($x, $y) for ${if (toVideo) "VIDEO" else "PHOTO"}")
-        dispatchTap(x, y)
+        if (node != null) {
+            Log.i(TAG, "Found trash node - clickable:${node.isClickable}, enabled:${node.isEnabled}, " +
+                    "bounds:${node.boundsInScreen()}")
+
+            // Try clicking the node
+            val clickSuccess = clickNode(node)
+            if (clickSuccess) {
+                Log.i(TAG, "Successfully clicked trash via accessibility")
+                return true
+            }
+
+            // If click failed, try tapping at node center
+            Log.w(TAG, "Node click failed, trying tap at center")
+            getNodeCenter(node)?.let { (x, y) ->
+                Log.i(TAG, "Tapping trash at node center ($x, $y)")
+                dispatchTap(x, y)
+                return true
+            }
+        }
+
+        // Fallback to coordinates
+        Log.w(TAG, "Accessibility failed, using coordinate fallback")
+        val trashX = screenWidth * 0.875f
+        val trashY = screenHeight * 1.034f
+        Log.i(TAG, "Tapping trash at fallback coordinates ($trashX, $trashY)")
+        dispatchTap(trashX, trashY)
+        return true
+    }
+
+    private fun AccessibilityNodeInfo.boundsInScreen(): String {
+        val rect = android.graphics.Rect()
+        getBoundsInScreen(rect)
+        return rect.toString()
+    }
+
+    /**
+     * Click the confirm/move to bin button in the deletion dialog
+     */
+    private fun clickConfirmDelete(): Boolean {
+        Log.i(TAG, "Looking for delete confirmation button")
+
+        // Try to find by content description
+        var node = findNodeByContentDescription("Move to bin", exactMatch = false)
+            ?: findNodeByContentDescription("Move to trash", exactMatch = false)
+            ?: findNodeByContentDescription("Delete", exactMatch = false)
+
+        if (node != null) {
+            // Try to click the node directly
+            if (clickNode(node)) {
+                return true
+            }
+            // If direct click fails, try tapping at node's center coordinates
+            getNodeCenter(node)?.let { (x, y) ->
+                Log.i(TAG, "Direct click failed, tapping confirm at ($x, $y)")
+                dispatchTap(x, y)
+                return true
+            }
+        } else {
+            // Fallback: the confirm button typically appears in the same location
+            Log.w(TAG, "Could not find confirm button, using fallback coordinates")
+            val confirmX = screenWidth * 0.875f
+            val confirmY = screenHeight * 1.034f
+            Log.i(TAG, "Tapping confirm at fallback position ($confirmX, $confirmY)")
+            dispatchTap(confirmX, confirmY)
+            return true
+        }
+        return false
+    }
+    
+    /**
+     * Navigate back/up in Google Photos (e.g., return to grid view)
+     */
+    fun navigateUpInPhotos(): Boolean {
+        Log.i(TAG, "Navigating up in Photos")
+
+        // Try to find the navigate up button by content description
+        var node = findNodeByContentDescription("Navigate up", exactMatch = false)
+
+        if (node != null) {
+            return clickNode(node)
+        } else {
+            Log.w(TAG, "Could not find navigate up button, using BACK action")
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            return true
+        }
+    }
+
+    /**
+     * Quick delete - click trash button, then confirm deletion
+     * Note: Controls are already visible when entering single-photo view from gallery
+     */
+    fun dispatchQuickDelete() {
+        Log.i(TAG, "Quick delete: trash -> confirm")
+
+        // Small delay to ensure controls are stable before clicking trash
+        handler.postDelayed({
+            Log.i(TAG, "Step 1: Clicking trash button")
+            clickTrashButton()
+        }, 200)
+
+        // Wait for confirmation dialog to appear, then confirm
+        handler.postDelayed({
+            Log.i(TAG, "Step 2: Confirming deletion")
+            clickConfirmDelete()
+        }, 1000)
+    }
+    
+    /**
+     * Switch between photo and video modes in Google Camera
+     * @param toVideo true = switch to video mode, false = switch to photo mode
+     */
+    fun dispatchModeSwipeGesture(toVideo: Boolean) {
+        val targetMode = if (toVideo) "video" else "photo"
+        val resourceId = if (toVideo) "video_supermode" else "camera_supermode"
+
+        Log.i(TAG, "Switching to $targetMode mode")
+
+        // Try to find the mode toggle by resource ID first
+        var node = findNodeByResourceId(resourceId)
+
+        // Fallback: try by content description
+        if (node == null) {
+            node = findNodeByContentDescription(targetMode, exactMatch = false)
+        }
+
+        if (node != null) {
+            // Check if already in the target mode (node is checked/selected)
+            if (node.isChecked) {
+                Log.i(TAG, "Already in $targetMode mode, no action needed")
+                return
+            }
+
+            // Try to click the node directly
+            if (!clickNode(node)) {
+                // If direct click fails, try tapping at node's center coordinates
+                getNodeCenter(node)?.let { (x, y) ->
+                    Log.i(TAG, "Direct click failed, tapping $targetMode toggle at ($x, $y)")
+                    dispatchTap(x, y)
+                }
+            }
+        } else {
+            // Last resort fallback: use hardcoded coordinates
+            Log.w(TAG, "Could not find $targetMode mode toggle, using fallback coordinates")
+            val y = screenHeight * 1.01f
+            val x: Float = if (toVideo) {
+                screenWidth * 0.55f
+            } else {
+                screenWidth * 0.45f
+            }
+            Log.i(TAG, "Tapping $targetMode icon at fallback position ($x, $y)")
+            dispatchTap(x, y)
+        }
     }
     
     private fun broadcastServiceStatus() {

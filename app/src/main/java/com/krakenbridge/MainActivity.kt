@@ -238,6 +238,12 @@ fun MainScreen(
             fontSize = 16.sp,
             color = Color.Gray
         )
+
+        Text(
+            text = "v${BuildInfo.VERSION}",
+            fontSize = 12.sp,
+            color = Color.Gray.copy(alpha = 0.6f)
+        )
         
         Spacer(modifier = Modifier.height(24.dp))
         
