@@ -80,6 +80,11 @@ class KrakenBleService : Service() {
     // Track if camera app is already open (first shutter just opens, subsequent take photo)
     private var cameraIsOpen = false
     
+    // Deduplication for button events (both legacy and new callbacks may fire)
+    private var lastButtonCode = -1
+    private var lastButtonTime = 0L
+    private val DEBOUNCE_MS = 100L
+    
     
     // Connection monitoring
     private var isUserDisconnect = false
@@ -357,6 +362,17 @@ class KrakenBleService : Service() {
     }
 
     private fun handleButtonEvent(code: Int) {
+        // Deduplicate: both legacy and new BLE callbacks may fire for same event
+        val now = System.currentTimeMillis()
+        synchronized(this) {
+            if (code == lastButtonCode && (now - lastButtonTime) < DEBOUNCE_MS) {
+                Log.d(TAG, "Button event: 0x${code.toString(16)} (deduplicated, ignoring)")
+                return
+            }
+            lastButtonCode = code
+            lastButtonTime = now
+        }
+        
         Log.d(TAG, "Button event: 0x${code.toString(16)}")
         
         // Check if screen is off - if so, wake device first
@@ -447,8 +463,15 @@ class KrakenBleService : Service() {
                 accessibilityService?.dispatchQuickDelete()
                 Log.i(TAG, "Gallery: delete triggered")
             }
-            BTN_SHUTTER_PRESS, BTN_FN_PRESS, BTN_BACK_PRESS -> {
-                // Shutter, Fn, or Back = return to camera
+            BTN_FN_PRESS -> {
+                // Fn in gallery = dump accessibility tree for debugging
+                // View with: adb logcat -s KrakenA11y:I
+                val accessibilityService = KrakenAccessibilityService.instance
+                accessibilityService?.dumpAccessibilityTree()
+                Log.i(TAG, "Gallery: dumping accessibility tree to logcat")
+            }
+            BTN_SHUTTER_PRESS, BTN_BACK_PRESS -> {
+                // Shutter or Back = return to camera
                 toggleGalleryMode()
             }
         }
