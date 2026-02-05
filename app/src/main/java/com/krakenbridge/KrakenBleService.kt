@@ -553,35 +553,6 @@ class KrakenBleService : Service() {
         }, 600)
     }
     
-    private fun openCameraAndTakePhoto() {
-        // Open camera (brings to foreground if already open)
-        openCamera()
-        
-        // Wait for camera to be in foreground, then tap shutter button
-        handler.postDelayed({
-            injectKeyEvent(KeyEvent.KEYCODE_CAMERA) // This triggers dispatchShutterTap()
-            Log.i(TAG, "Photo triggered via shutter tap")
-        }, 500) // 500ms delay for camera to come to foreground
-    }
-    
-    private fun openCameraVideoAndToggleRecording() {
-        // In video mode, just tap the record button directly
-        // Don't call openCamera() as that might reset to photo mode
-        // The camera should already be in foreground from when we switched to video mode
-        injectKeyEvent(KeyEvent.KEYCODE_CAMERA) // This triggers dispatchShutterTap()
-        Log.i(TAG, "Video recording toggled via shutter tap")
-    }
-    
-    private fun openCameraVideo() {
-        // Open Google Camera normally, then swipe to switch to video mode
-        openCamera()
-        
-        // Wait for camera to open, then swipe to switch to video mode
-        handler.postDelayed({
-            swipeToSwitchCameraMode(true)
-            Log.i(TAG, "Swiped to switch to VIDEO mode")
-        }, 600)
-    }
     
     private fun swipeToSwitchCameraMode(toVideo: Boolean) {
         // Send swipe gesture via accessibility service to switch photo/video
