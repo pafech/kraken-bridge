@@ -16,9 +16,28 @@ android {
         versionName = "1.0"
     }
 
+    // Signing config reads from environment variables injected by the release workflow.
+    // Local debug builds are unaffected — the release signing config is only applied
+    // when KEYSTORE_PATH is set.
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("KEYSTORE_PATH")
+            if (!keystorePath.isNullOrBlank()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Only attach signing config when the env vars are present (i.e. in CI)
+            if (!System.getenv("KEYSTORE_PATH").isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
