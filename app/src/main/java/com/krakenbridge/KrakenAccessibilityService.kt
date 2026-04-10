@@ -401,11 +401,17 @@ class KrakenAccessibilityService : AccessibilityService() {
 
         // Get screen dimensions for gesture dispatch
         val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        windowManager.defaultDisplay.getMetrics(metrics)
-        screenWidth = metrics.widthPixels
-        screenHeight = metrics.heightPixels
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val bounds = windowManager.currentWindowMetrics.bounds
+            screenWidth = bounds.width()
+            screenHeight = bounds.height()
+        } else {
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.getMetrics(metrics)
+            screenWidth = metrics.widthPixels
+            screenHeight = metrics.heightPixels
+        }
 
         Log.i(TAG, "Accessibility service v${BuildInfo.VERSION} created, screen: ${screenWidth}x${screenHeight}")
     }
@@ -657,15 +663,40 @@ class KrakenAccessibilityService : AccessibilityService() {
     // ==================== Google Photos Functions ====================
 
     /**
-     * Tap on the most recent photo in Google Photos grid view (top-left area)
-     * TODO: Could be improved with accessibility if we can identify the first photo
-     * in the grid view, but coordinate-based works well enough for this use case
+     * Tap on the most recent photo in Google Photos grid view.
+     * Prefers accessibility node discovery so the tap is screen-size independent;
+     * falls back to proportional coordinates if the grid is not yet accessible.
      */
     fun tapRecentPhoto() {
+        val root = rootInActiveWindow
+        if (root != null) {
+            // Collect clickable nodes in the upper grid area (excludes status/nav bars)
+            val gridItems = mutableListOf<AccessibilityNodeInfo>()
+            collectClickableNodesInRegion(
+                root,
+                0f, screenWidth.toFloat(),
+                screenHeight * 0.10f, screenHeight * 0.45f,
+                gridItems
+            )
+            if (gridItems.isNotEmpty()) {
+                // Sort top-left first — most recent photo in a reverse-chronological grid
+                val topLeft = gridItems.minWithOrNull(compareBy(
+                    { val r = Rect(); it.getBoundsInScreen(r); r.top },
+                    { val r = Rect(); it.getBoundsInScreen(r); r.left }
+                ))
+                topLeft?.let {
+                    val rect = Rect()
+                    it.getBoundsInScreen(rect)
+                    Log.i(TAG, "Tapping most recent photo via accessibility at (${rect.exactCenterX()}, ${rect.exactCenterY()})")
+                    dispatchTap(rect.exactCenterX(), rect.exactCenterY())
+                    return
+                }
+            }
+        }
+        // Coordinate fallback if accessibility tree is empty or not yet loaded
         val x = screenWidth * 0.12f
         val y = screenHeight * 0.24f
-
-        Log.i(TAG, "Tapping recent photo at ($x, $y)")
+        Log.w(TAG, "Accessibility grid search failed, using coordinate fallback ($x, $y)")
         dispatchTap(x, y)
     }
 
@@ -879,15 +910,25 @@ class KrakenAccessibilityService : AccessibilityService() {
         // Small delay to ensure controls are stable before clicking trash
         handler.postDelayed({
             Log.i(TAG, "Step 1: Clicking trash button")
-            clickTrashButton()
-        }, 200)
+            val trashClicked = clickTrashButton()
+            if (!trashClicked) {
+                Log.w(TAG, "Trash click failed — aborting delete sequence")
+                return@postDelayed
+            }
 
-        // Wait for confirmation dialog to appear, then confirm
-        // Dialog needs ~1 second to animate in and become accessible
-        handler.postDelayed({
-            Log.i(TAG, "Step 2: Confirming deletion")
-            clickConfirmDelete()
-        }, 1500)
+            // Wait for confirmation dialog to animate in, then confirm.
+            // On slow devices the dialog may not be accessible yet; retry once after 600ms.
+            handler.postDelayed({
+                Log.i(TAG, "Step 2: Confirming deletion")
+                val confirmed = clickConfirmDelete()
+                if (!confirmed) {
+                    handler.postDelayed({
+                        Log.w(TAG, "Step 2 retry: confirm dialog not ready on first attempt")
+                        clickConfirmDelete()
+                    }, 600)
+                }
+            }, 1500)
+        }, 200)
     }
     
     /**
