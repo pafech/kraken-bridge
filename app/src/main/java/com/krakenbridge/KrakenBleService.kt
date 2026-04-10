@@ -57,8 +57,8 @@ class KrakenBleService : Service() {
     }
 
     private var bluetoothAdapter: BluetoothAdapter? = null
-    private var bluetoothGatt: BluetoothGatt? = null
-    private var scanning = false
+    @Volatile private var bluetoothGatt: BluetoothGatt? = null
+    @Volatile private var scanning = false
     private val handler = Handler(Looper.getMainLooper())
     
     // Wake lock to keep device awake while connected
@@ -87,13 +87,22 @@ class KrakenBleService : Service() {
     
     
     // Connection monitoring
-    private var isUserDisconnect = false
+    @Volatile private var isUserDisconnect = false
     private var lastConnectedDevice: BluetoothDevice? = null
+    private var reconnectAttempts = 0
+    private val MAX_RECONNECT_ATTEMPTS = 5
+    private val RECONNECT_BASE_DELAY_MS = 2000L
     private val connectionCheckRunnable = object : Runnable {
         override fun run() {
             checkConnectionHealth()
             handler.postDelayed(this, 5000) // Check every 5 seconds
         }
+    }
+
+    // Fires if GATT service discovery never completes (e.g. firmware bug / race on connect)
+    private val serviceDiscoveryTimeoutRunnable = Runnable {
+        Log.e(TAG, "Service discovery timed out - forcing disconnect to retry")
+        bluetoothGatt?.disconnect()
     }
     
     private val scanCallback = object : ScanCallback() {
@@ -102,6 +111,7 @@ class KrakenBleService : Service() {
             val name = device.name ?: return
             
             if (name == DEVICE_NAME) {
+                if (!scanning) return  // Guard: already stopped — prevents duplicate connects
                 Log.i(TAG, "Found Kraken device: ${device.address}")
                 stopScan()
                 connectToDevice(device)
@@ -126,9 +136,11 @@ class KrakenBleService : Service() {
                     acquireConnectionWakeLock()
                     lastConnectedDevice = gatt.device
                     isUserDisconnect = false
+                    reconnectAttempts = 0  // Successful connection resets backoff counter
                     startConnectionMonitoring()
-                    // Discover services after connection
+                    // Discover services after connection; cancel if it takes > 10s
                     handler.postDelayed({
+                        handler.postDelayed(serviceDiscoveryTimeoutRunnable, 10000)
                         gatt.discoverServices()
                     }, 500)
                 }
@@ -152,6 +164,7 @@ class KrakenBleService : Service() {
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            handler.removeCallbacks(serviceDiscoveryTimeoutRunnable)
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.i(TAG, "Services discovered")
                 enableButtonNotifications(gatt)
@@ -204,7 +217,14 @@ class KrakenBleService : Service() {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.d(TAG, "Connection healthy, RSSI: $rssi dBm")
             } else {
-                Log.w(TAG, "Failed to read RSSI, connection may be lost")
+                Log.w(TAG, "RSSI read failed (status=$status) — treating as connection loss")
+                stopConnectionMonitoring()
+                gatt.close()
+                bluetoothGatt = null
+                if (!isUserDisconnect) {
+                    broadcastStatus("reconnecting", "Connection lost - reconnecting...")
+                    attemptReconnect()
+                }
             }
         }
     }
@@ -248,6 +268,11 @@ class KrakenBleService : Service() {
         isRecording = false
         isGalleryMode = false
         releaseVideoRecordingWakeLock()
+        // Reset dedup so the first event after a reconnect is never silently dropped
+        synchronized(this) {
+            lastButtonCode = -1
+            lastButtonTime = 0L
+        }
         Log.i(TAG, "State reset: all flags cleared")
     }
 
@@ -353,8 +378,14 @@ class KrakenBleService : Service() {
         // Write to CCCD to enable remote notifications
         val descriptor = characteristic.getDescriptor(CCCD_UUID)
         if (descriptor != null) {
-            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            gatt.writeDescriptor(descriptor)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+            } else {
+                @Suppress("DEPRECATION")
+                descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                @Suppress("DEPRECATION")
+                gatt.writeDescriptor(descriptor)
+            }
         } else {
             Log.w(TAG, "CCCD descriptor not found, notifications may not work")
             broadcastStatus("ready", "Connected (no CCCD)")
@@ -653,6 +684,7 @@ class KrakenBleService : Service() {
         val gatt = bluetoothGatt
         if (gatt == null) {
             Log.w(TAG, "Connection check: GATT is null, connection lost")
+            stopConnectionMonitoring()  // Stop loop before reconnecting — prevents cascading attempts
             broadcastStatus("reconnecting", "Connection lost - reconnecting...")
             attemptReconnect()
             return
@@ -676,15 +708,26 @@ class KrakenBleService : Service() {
             broadcastStatus("disconnected", "Disconnected - press Connect to retry")
             return
         }
-        
-        // Wait a moment then try to reconnect
+
+        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            Log.w(TAG, "Max reconnect attempts ($MAX_RECONNECT_ATTEMPTS) reached — falling back to scan")
+            reconnectAttempts = 0
+            broadcastStatus("scanning", "Reconnect failed - scanning for Kraken...")
+            startScan()
+            return
+        }
+
+        // Exponential backoff: 2s → 4s → 8s → 16s → 32s (capped at attempt index 4)
+        val delay = RECONNECT_BASE_DELAY_MS * (1L shl reconnectAttempts.coerceAtMost(4))
+        reconnectAttempts++
+        Log.i(TAG, "Reconnect attempt $reconnectAttempts/$MAX_RECONNECT_ATTEMPTS in ${delay}ms")
+
         handler.postDelayed({
             if (bluetoothGatt == null && !isUserDisconnect) {
-                Log.i(TAG, "Attempting to reconnect to ${device.address}")
-                broadcastStatus("reconnecting", "Reconnecting to Kraken...")
+                broadcastStatus("reconnecting", "Reconnecting... (attempt $reconnectAttempts)")
                 connectToDevice(device)
             }
-        }, 2000)
+        }, delay)
     }
 
     private fun injectKeyEvent(keyCode: Int) {
