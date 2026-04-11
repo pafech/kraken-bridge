@@ -1,0 +1,101 @@
+name: Release
+
+# Primary trigger: push a version tag  →  git tag v1.2.3 && git push origin v1.2.3
+# Escape hatch:    run manually from the GitHub Actions UI (no GitHub Release created)
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  release:
+    name: Build & publish signed release APK
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write   # required to create the GitHub Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # ------------------------------------------------------------------ #
+      # Derive VERSION_NAME and VERSION_CODE from the triggering ref.        #
+      #   Tag push (v1.2.3)  →  VERSION_NAME=1.2.3  VERSION_CODE=<run#>     #
+      #   workflow_dispatch   →  VERSION_NAME=manual-YYYYMMDD               #
+      # github.run_number is a monotonically increasing integer that starts  #
+      # at 1 and never resets — safe to use as Android versionCode.         #
+      # ------------------------------------------------------------------ #
+      - name: Set version
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [[ "$TAG" == v* ]]; then
+            echo "VERSION_NAME=${TAG#v}" >> $GITHUB_ENV
+          else
+            echo "VERSION_NAME=manual-$(date +%Y%m%d)" >> $GITHUB_ENV
+          fi
+          echo "VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
+
+      # ------------------------------------------------------------------ #
+      # Signing — requires four repository secrets:                          #
+      #   KEYSTORE_BASE64   base64-encoded .jks file                         #
+      #     encode with:  base64 -w 0 kraken-release.jks                    #
+      #   KEYSTORE_PASSWORD  keystore password                               #
+      #   KEY_ALIAS          key alias inside the keystore                   #
+      #   KEY_PASSWORD       key password                                    #
+      #                                                                      #
+      # Security note: softprops/action-gh-release is a third-party action. #
+      # For stricter supply-chain security, pin it to a commit SHA instead   #
+      # of the @v2 tag. Find the SHA at:                                     #
+      #   github.com/softprops/action-gh-release/releases                   #
+      # ------------------------------------------------------------------ #
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/release.jks"
+
+      - name: Build signed release APK
+        run: ./gradlew assembleRelease --no-daemon
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          VERSION_NAME: ${{ env.VERSION_NAME }}
+          VERSION_CODE: ${{ env.VERSION_CODE }}
+
+      # Always remove the decoded keystore from disk after the build
+      - name: Clean up keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: Upload release APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kraken-bridge-${{ env.VERSION_NAME }}
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+      # Only publish a GitHub Release when triggered by a tag push (not workflow_dispatch)
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/*.apk
+          generate_release_notes: true
+          fail_on_unmatched_files: true

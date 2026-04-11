@@ -12,13 +12,35 @@ android {
         applicationId = "com.krakenbridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // In CI the release workflow injects VERSION_CODE (github.run_number, monotonically
+        // increasing) and VERSION_NAME (git tag minus the leading 'v'). Local builds fall
+        // back to the literals below so gradle sync still works without env vars.
+        versionCode = (System.getenv("VERSION_CODE") ?: "1").toIntOrNull() ?: 1
+        versionName = System.getenv("VERSION_NAME") ?: "1.0"
+    }
+
+    // Signing config reads from environment variables injected by the release workflow.
+    // Local debug builds are unaffected — the release signing config is only applied
+    // when KEYSTORE_PATH is set.
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("KEYSTORE_PATH")
+            if (!keystorePath.isNullOrBlank()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Only attach signing config when the env vars are present (i.e. in CI)
+            if (!System.getenv("KEYSTORE_PATH").isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
