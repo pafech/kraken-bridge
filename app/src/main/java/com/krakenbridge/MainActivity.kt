@@ -4,8 +4,10 @@ import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.*
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
@@ -132,10 +134,21 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startConnection() {
+        requestBatteryOptimizationIfNeeded()
         val intent = Intent(this, KrakenBleService::class.java).apply {
             action = KrakenBleService.ACTION_CONNECT
         }
         startForegroundService(intent)
+    }
+
+    private fun requestBatteryOptimizationIfNeeded() {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            startActivity(intent)
+        }
     }
 
     private fun stopConnection() {
