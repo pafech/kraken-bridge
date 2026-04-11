@@ -1,10 +1,12 @@
 name: Release
 
-# Trigger by pushing a version tag: git tag v1.2.3 && git push origin v1.2.3
+# Primary trigger: push a version tag  →  git tag v1.2.3 && git push origin v1.2.3
+# Escape hatch:    run manually from the GitHub Actions UI (no GitHub Release created)
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 jobs:
   release:
@@ -12,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write   # needed to create the GitHub Release
+      contents: write   # required to create the GitHub Release
 
     steps:
       - name: Checkout
@@ -31,12 +33,34 @@ jobs:
         run: chmod +x ./gradlew
 
       # ------------------------------------------------------------------ #
-      # Signing — requires four repository secrets:                         #
-      #   KEYSTORE_BASE64   base64-encoded .jks file                        #
-      #     encode with: base64 -w 0 kraken-release.jks                     #
-      #   KEYSTORE_PASSWORD keystore password                               #
-      #   KEY_ALIAS         key alias inside the keystore                   #
-      #   KEY_PASSWORD      key password                                    #
+      # Derive VERSION_NAME and VERSION_CODE from the triggering ref.        #
+      #   Tag push (v1.2.3)  →  VERSION_NAME=1.2.3  VERSION_CODE=<run#>     #
+      #   workflow_dispatch   →  VERSION_NAME=manual-YYYYMMDD               #
+      # github.run_number is a monotonically increasing integer that starts  #
+      # at 1 and never resets — safe to use as Android versionCode.         #
+      # ------------------------------------------------------------------ #
+      - name: Set version
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [[ "$TAG" == v* ]]; then
+            echo "VERSION_NAME=${TAG#v}" >> $GITHUB_ENV
+          else
+            echo "VERSION_NAME=manual-$(date +%Y%m%d)" >> $GITHUB_ENV
+          fi
+          echo "VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
+
+      # ------------------------------------------------------------------ #
+      # Signing — requires four repository secrets:                          #
+      #   KEYSTORE_BASE64   base64-encoded .jks file                         #
+      #     encode with:  base64 -w 0 kraken-release.jks                    #
+      #   KEYSTORE_PASSWORD  keystore password                               #
+      #   KEY_ALIAS          key alias inside the keystore                   #
+      #   KEY_PASSWORD       key password                                    #
+      #                                                                      #
+      # Security note: softprops/action-gh-release is a third-party action. #
+      # For stricter supply-chain security, pin it to a commit SHA instead   #
+      # of the @v2 tag. Find the SHA at:                                     #
+      #   github.com/softprops/action-gh-release/releases                   #
       # ------------------------------------------------------------------ #
       - name: Decode keystore
         run: |
@@ -49,15 +73,24 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          VERSION_NAME: ${{ env.VERSION_NAME }}
+          VERSION_CODE: ${{ env.VERSION_CODE }}
+
+      # Always remove the decoded keystore from disk after the build
+      - name: Clean up keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
 
       - name: Upload release APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kraken-bridge-${{ github.ref_name }}
+          name: kraken-bridge-${{ env.VERSION_NAME }}
           path: app/build/outputs/apk/release/*.apk
           retention-days: 30
 
+      # Only publish a GitHub Release when triggered by a tag push (not workflow_dispatch)
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: app/build/outputs/apk/release/*.apk

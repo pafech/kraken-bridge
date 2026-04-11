@@ -12,8 +12,11 @@ android {
         applicationId = "com.krakenbridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // In CI the release workflow injects VERSION_CODE (github.run_number, monotonically
+        // increasing) and VERSION_NAME (git tag minus the leading 'v'). Local builds fall
+        // back to the literals below so gradle sync still works without env vars.
+        versionCode = (System.getenv("VERSION_CODE") ?: "1").toIntOrNull() ?: 1
+        versionName = System.getenv("VERSION_NAME") ?: "1.0"
     }
 
     // Signing config reads from environment variables injected by the release workflow.
