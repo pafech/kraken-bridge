@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.krakenbridge"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.krakenbridge"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         // In CI the release workflow injects VERSION_CODE (github.run_number, monotonically
         // increasing) and VERSION_NAME (git tag minus the leading 'v'). Local builds fall
         // back to the literals below so gradle sync still works without env vars.
