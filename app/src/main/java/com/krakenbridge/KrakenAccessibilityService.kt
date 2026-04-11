@@ -398,21 +398,7 @@ class KrakenAccessibilityService : AccessibilityService() {
         super.onCreate()
         instance = this
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
-        // Get screen dimensions for gesture dispatch
-        val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val bounds = windowManager.currentWindowMetrics.bounds
-            screenWidth = bounds.width()
-            screenHeight = bounds.height()
-        } else {
-            val metrics = DisplayMetrics()
-            @Suppress("DEPRECATION")
-            windowManager.defaultDisplay.getMetrics(metrics)
-            screenWidth = metrics.widthPixels
-            screenHeight = metrics.heightPixels
-        }
-
+        updateScreenDimensions()
         Log.i(TAG, "Accessibility service v${BuildInfo.VERSION} created, screen: ${screenWidth}x${screenHeight}")
     }
 
@@ -452,6 +438,27 @@ class KrakenAccessibilityService : AccessibilityService() {
             // Receiver not registered
         }
         Log.i(TAG, "Accessibility service destroyed")
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        updateScreenDimensions()
+        Log.i(TAG, "Configuration changed, screen: ${screenWidth}x${screenHeight}")
+    }
+
+    private fun updateScreenDimensions() {
+        val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val bounds = windowManager.currentWindowMetrics.bounds
+            screenWidth = bounds.width()
+            screenHeight = bounds.height()
+        } else {
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.getMetrics(metrics)
+            screenWidth = metrics.widthPixels
+            screenHeight = metrics.heightPixels
+        }
     }
 
     private fun handleKeyInjection(keyCode: Int) {

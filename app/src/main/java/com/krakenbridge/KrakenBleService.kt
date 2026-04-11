@@ -69,16 +69,16 @@ class KrakenBleService : Service() {
     private var videoRecordingWakeLock: PowerManager.WakeLock? = null
 
     // Camera mode tracking: false = photo, true = video
-    private var isVideoMode = false
+    @Volatile private var isVideoMode = false
 
     // Track if currently recording video
-    private var isRecording = false
-    
+    @Volatile private var isRecording = false
+
     // App mode tracking: false = camera, true = gallery/photos
-    private var isGalleryMode = false
-    
+    @Volatile private var isGalleryMode = false
+
     // Track if camera app is already open (first shutter just opens, subsequent take photo)
-    private var cameraIsOpen = false
+    @Volatile private var cameraIsOpen = false
     
     // Deduplication for button events (both legacy and new callbacks may fire)
     private var lastButtonCode = -1
