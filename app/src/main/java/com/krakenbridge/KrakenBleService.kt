@@ -3,10 +3,13 @@ package com.krakenbridge
 import android.app.*
 import android.bluetooth.*
 import android.bluetooth.le.*
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.*
+import android.provider.MediaStore
 import android.util.Log
 import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
@@ -577,36 +580,85 @@ class KrakenBleService : Service() {
         }
     }
     
+    /**
+     * Open the most recent photo or video directly in single-item view.
+     * Queries MediaStore for the newest media file and opens it with ACTION_VIEW,
+     * which lands the user straight in the single-photo/video viewer — no grid
+     * navigation or accessibility tapping needed.
+     */
     private fun openPhotosApp() {
+        val latestUri = queryLatestMediaUri()
+        if (latestUri != null) {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, latestUri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    // Prefer Google Photos if installed, fall back to any viewer
+                    setPackage("com.google.android.apps.photos")
+                }
+                startActivity(intent)
+                Log.i(TAG, "Opened latest media in Google Photos: $latestUri")
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "Google Photos not available, trying default viewer")
+            }
+            // Retry without package restriction
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, latestUri).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+                Log.i(TAG, "Opened latest media in default viewer: $latestUri")
+                return
+            } catch (e: Exception) {
+                Log.e(TAG, "No viewer available for $latestUri: ${e.message}")
+            }
+        } else {
+            Log.w(TAG, "No media found on device — opening Google Photos home")
+        }
+
+        // Fallback: open Google Photos launcher (lands on home screen)
         try {
-            // Open Google Photos
             val intent = Intent(Intent.ACTION_MAIN).apply {
                 setPackage("com.google.android.apps.photos")
                 addCategory(Intent.CATEGORY_LAUNCHER)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
-            Log.i(TAG, "Opened Google Photos")
-            
-            // After Photos opens (in grid view), tap on the most recent photo to enter single view
-            handler.postDelayed({
-                val accessibilityService = KrakenAccessibilityService.instance
-                accessibilityService?.tapRecentPhoto()
-                Log.i(TAG, "Tapped on most recent photo")
-            }, 1000)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to open Google Photos: ${e.message}")
-            // Try generic gallery
-            try {
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    type = "image/*"
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+    }
+
+    /**
+     * Query MediaStore for the most recently added image or video.
+     * Uses the merged Files table so both photos and videos are considered.
+     */
+    private fun queryLatestMediaUri(): Uri? {
+        val collection = MediaStore.Files.getContentUri("external")
+        val projection = arrayOf(MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.MEDIA_TYPE)
+        val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (?, ?)"
+        val selectionArgs = arrayOf(
+            MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
+            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString()
+        )
+        val sortOrder = "${MediaStore.Files.FileColumns.DATE_ADDED} DESC"
+
+        contentResolver.query(collection, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
+                val mediaType = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE))
+
+                val contentUri = when (mediaType) {
+                    MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO ->
+                        ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+                    else ->
+                        ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
                 }
-                startActivity(intent)
-            } catch (e2: Exception) {
-                Log.e(TAG, "Failed to open any gallery: ${e2.message}")
+                Log.d(TAG, "Latest media: id=$id, type=$mediaType, uri=$contentUri")
+                return contentUri
             }
         }
+        return null
     }
     
     private fun toggleCameraMode() {
