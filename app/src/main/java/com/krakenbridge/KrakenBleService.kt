@@ -19,7 +19,8 @@ class KrakenBleService : Service() {
         const val CHANNEL_ID = "kraken_ble_channel"
 
         @Volatile
-        private var instance: KrakenBleService? = null
+        var instance: KrakenBleService? = null
+            private set
 
         // Kraken housing BLE identifiers
         const val DEVICE_NAME = "Kraken"
@@ -767,6 +768,32 @@ class KrakenBleService : Service() {
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
+
+    // ── Test-only hooks ──────────────────────────────────────────────────────
+    // These properties and methods expose internal state / entry points so that
+    // BDD step definitions can drive the service without a physical BLE housing.
+    // They are kept internal so they are invisible to consumers of the library.
+
+    /** Current camera-mode flag: false = photo, true = video. */
+    internal val testIsVideoMode: Boolean get() = isVideoMode
+
+    /** Current gallery-mode flag: false = camera, true = gallery/photos. */
+    internal val testIsGalleryMode: Boolean get() = isGalleryMode
+
+    /** Whether a video recording is currently in progress. */
+    internal val testIsRecording: Boolean get() = isRecording
+
+    /** Whether the camera app has already been opened at least once. */
+    internal val testCameraIsOpen: Boolean get() = cameraIsOpen
+
+    /**
+     * Simulate receiving a hardware button press from the BLE housing.
+     * Drives exactly the same code path as a real BLE notification.
+     * Only intended for use in instrumented BDD tests.
+     */
+    internal fun simulateButtonPress(code: Int) = handleButtonEvent(code)
+
+    // ────────────────────────────────────────────────────────────────────────
 
     private fun broadcastStatus(status: String, message: String) {
         updateNotification(message)
