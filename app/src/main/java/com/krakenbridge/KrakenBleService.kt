@@ -587,30 +587,31 @@ class KrakenBleService : Service() {
      * navigation or accessibility tapping needed.
      */
     private fun openPhotosApp() {
-        val latestUri = queryLatestMediaUri()
-        if (latestUri != null) {
+        val latest = queryLatestMedia()
+        if (latest != null) {
+            val (uri, mimeType) = latest
             try {
-                val intent = Intent(Intent.ACTION_VIEW, latestUri).apply {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, mimeType)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    // Prefer Google Photos if installed, fall back to any viewer
                     setPackage("com.google.android.apps.photos")
                 }
                 startActivity(intent)
-                Log.i(TAG, "Opened latest media in Google Photos: $latestUri")
+                Log.i(TAG, "Opened latest media in Google Photos: $uri ($mimeType)")
                 return
             } catch (e: Exception) {
                 Log.w(TAG, "Google Photos not available, trying default viewer")
             }
-            // Retry without package restriction
             try {
-                val intent = Intent(Intent.ACTION_VIEW, latestUri).apply {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, mimeType)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 startActivity(intent)
-                Log.i(TAG, "Opened latest media in default viewer: $latestUri")
+                Log.i(TAG, "Opened latest media in default viewer: $uri")
                 return
             } catch (e: Exception) {
-                Log.e(TAG, "No viewer available for $latestUri: ${e.message}")
+                Log.e(TAG, "No viewer available for $uri: ${e.message}")
             }
         } else {
             Log.w(TAG, "No media found on device — opening Google Photos home")
@@ -631,9 +632,10 @@ class KrakenBleService : Service() {
 
     /**
      * Query MediaStore for the most recently added image or video.
-     * Uses the merged Files table so both photos and videos are considered.
+     * Returns the content URI and MIME type, or null if nothing is found.
+     * The MIME type is required for Google Photos to open in single-item view.
      */
-    private fun queryLatestMediaUri(): Uri? {
+    private fun queryLatestMedia(): Pair<Uri, String>? {
         val collection = MediaStore.Files.getContentUri("external")
         val projection = arrayOf(MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.MEDIA_TYPE)
         val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (?, ?)"
@@ -648,14 +650,16 @@ class KrakenBleService : Service() {
                 val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
                 val mediaType = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE))
 
-                val contentUri = when (mediaType) {
-                    MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO ->
-                        ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
-                    else ->
-                        ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+                val isVideo = mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
+                val contentUri = if (isVideo) {
+                    ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+                } else {
+                    ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
                 }
+                val mimeType = if (isVideo) "video/*" else "image/*"
+
                 Log.d(TAG, "Latest media: id=$id, type=$mediaType, uri=$contentUri")
-                return contentUri
+                return Pair(contentUri, mimeType)
             }
         }
         return null
