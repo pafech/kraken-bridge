@@ -1,108 +1,131 @@
 # Kraken Bridge
 
-Android app that bridges Kraken dive housing buttons to Google Camera and Google Photos.
+Android app that bridges a [Kraken](https://www.krakenunderwatersystems.com/) dive housing's BLE remote to Google Camera and Google Photos on an Android phone. Divers control the camera entirely through the housing buttons — no touchscreen interaction needed underwater.
 
-## Features
+## How it works
 
-- BLE connection to Kraken housing
-- Background service with wake lock (stays awake during dive)
-- Auto-wake: any button press wakes device and opens camera
+```
+Kraken housing  ──BLE──>  KrakenBleService  ──intent/gesture──>  Google Camera
+   buttons                (foreground service)                    Google Photos
+```
 
-## Button Mapping
+1. **KrakenBleService** runs as a foreground service, maintains a BLE connection to the Kraken housing, and translates button presses into actions.
+2. **KrakenAccessibilityService** injects tap gestures and key events into Google Camera and Google Photos (required because third-party apps can't programmatically control the camera shutter or navigate Photos).
+3. The service survives process death (SharedPreferences + `START_STICKY`) and device reboots (`BOOT_COMPLETED` receiver).
 
-### Camera Mode
+## Button mapping
+
+### Camera mode
 
 | Button | Action |
 |--------|--------|
-| Shutter (red) | Take photo / Start-stop video |
-| Fn | Toggle Photo ↔ Video mode |
+| Shutter (red) | First press: open camera. Subsequent: take photo / start-stop video |
+| Fn | Toggle photo / video mode |
 | Plus (+) | Focus closer |
 | Minus (-) | Focus farther |
 | OK | Auto-focus (center) |
-| Back | Switch to Gallery |
+| Back | Switch to gallery |
 
-### Gallery Mode
+### Gallery mode
 
 | Button | Action |
 |--------|--------|
-| Plus (+) | Next photo/video |
-| Minus (-) | Previous photo/video |
-| OK | Delete |
-| Back / Fn / Shutter | Return to Camera |
+| Plus (+) | Next photo/video (swipe left) |
+| Minus (-) | Previous photo/video (swipe right) |
+| OK | Delete current photo/video |
+| Back / Shutter | Return to camera |
 
-## Installation
+Gallery mode opens the most recently captured photo or video directly in single-item view — designed for divers reviewing shots during safety stops.
 
-1. Install APK and grant Bluetooth/Location permissions
-2. Enable Accessibility Service: Settings → Accessibility → Kraken Bridge
+## Requirements
 
-## Usage
+- Android 8.0+ (API 26), tested up to Android 15 (API 36)
+- Google Camera and Google Photos installed
+- Kraken dive housing with BLE remote
 
-1. Open app, tap "Connect to Kraken"
-2. Wait for "Ready" status
-3. Open Camera and put phone in housing
+## Setup
+
+1. Install the APK (sideload or via Google Play)
+2. Grant permissions when prompted: Bluetooth, Location, Notifications, Photos/Videos
+3. Enable the accessibility service: **Settings > Accessibility > Kraken Bridge**
+4. Open the app, tap **Connect to Kraken**
+5. Wait for "Ready" status, then place the phone in the housing
+
+### Permissions
+
+| Permission | Why |
+|---|---|
+| Bluetooth Scan/Connect | Discover and connect to the Kraken housing |
+| Location | Required by Android for BLE scanning |
+| Notifications | Foreground service notification (connection status) |
+| Photos & Videos | Query MediaStore to open the latest capture in gallery mode |
+| Wake Lock | Keep the BLE connection alive during a dive |
+| Battery Optimization Exemption | Prevent Android from killing the service |
+
+On Android 14+, grant **full** photo access ("Allow all") rather than "Select photos" — partial access prevents the app from finding your latest capture.
+
+## Architecture
+
+```
+app/src/main/java/com/krakenbridge/
+├── MainActivity.kt                  # Compose UI, permissions, status display
+├── KrakenBleService.kt              # Foreground BLE service, button event handling
+├── KrakenAccessibilityService.kt    # Gesture/key injection into Camera and Photos
+├── BootReceiver.kt                  # Auto-reconnect after device reboot
+├── BuildInfo.kt                     # Shared version constant
+└── ui/
+    ├── MainScreen.kt                # Main Compose screen
+    ├── HelpDialog.kt                # In-app help overlay
+    └── Theme.kt                     # Material 3 theme
+```
+
+### Key design decisions
+
+- **Foreground service, not a bound service** — the BLE connection must outlive the activity. `START_STICKY` ensures Android restarts it after process death.
+- **Accessibility service for camera control** — Android provides no public API to trigger the shutter or navigate Google Photos. The accessibility service dispatches tap gestures at the shutter button coordinates and swipe gestures for photo navigation.
+- **MediaStore query for gallery** — instead of opening Google Photos home and navigating to the latest photo, the app queries MediaStore for the newest image/video and opens it directly with `ACTION_VIEW` + MIME type, landing in single-item view.
+- **No `autoConnect`** — the app manages all reconnection logic (exponential backoff, 5 attempts, then fallback to scan) rather than relying on the OS Bluetooth stack's unreliable auto-reconnect.
 
 ## Building
 
 ```bash
+# Debug APK
 ./gradlew assembleDebug
+
+# Run BDD tests on connected device or emulator
+./gradlew connectedDebugAndroidTest
 ```
 
-## CI / CD Pipeline
+Requires JDK 17.
 
-APK generation is fully automated — no manual Android Studio build required.
+## CI/CD
 
-### How it works
+Two GitHub Actions workflows automate everything:
 
-Two GitHub Actions workflows handle the entire build and release process:
-
-```
-Every push / PR              Tag push (v*)
-─────────────────            ──────────────────────────────
-ci.yml                       release.yml
-  │                            │
-  ├─ Checkout                  ├─ Checkout
-  ├─ JDK 17 + Gradle cache     ├─ JDK 17 + Gradle cache
-  ├─ assembleDebug             ├─ Derive version from tag
-  └─ Upload artifact           ├─ Decode keystore secret
-       (7-day retention)       ├─ assembleRelease (signed)
-                               ├─ Clean up keystore
-                               ├─ Upload artifact (30-day)
-                               └─ Create GitHub Release
-                                    └─ APK attached
-```
+| Workflow | Trigger | Output |
+|---|---|---|
+| `ci.yml` | Push to `main`, PRs | Debug APK + BDD tests on emulator |
+| `release.yml` | Tag push (`v*`) or manual | Signed APK + AAB + GitHub Release |
 
 ### Creating a release
 
-1. Commit and push your changes to `main`
-2. Tag the commit with a semantic version:
-   ```bash
-   git tag v1.2.3
-   git push origin v1.2.3
-   ```
-3. The release workflow starts automatically. Within a few minutes a GitHub
-   Release appears with the signed APK attached and auto-generated release notes.
+```bash
+git tag v1.3.0
+git push origin v1.3.0
+```
 
-The tag drives both the APK filename and the Android `versionName` (e.g. `v1.2.3`
-→ `versionName = "1.2.3"`). The `versionCode` is set to `github.run_number`, a
-monotonically increasing integer that Android requires for over-the-air upgrades.
+The release workflow builds a signed APK (for GitHub Releases / sideloading) and a signed AAB (for Google Play Store upload). The tag drives `versionName`; `versionCode` is `github.run_number` (monotonically increasing).
 
-You can also trigger a signed build manually without creating a release via
-**Actions → Release → Run workflow** in the GitHub UI.
+### Repository secrets
 
-### First-time secrets setup
-
-The release workflow requires four repository secrets
-(**Settings → Secrets and variables → Actions → New repository secret**):
-
-| Secret | How to get it |
+| Secret | Description |
 |---|---|
-| `KEYSTORE_BASE64` | `base64 -w 0 kraken-release.jks` — paste the output |
-| `KEYSTORE_PASSWORD` | Password chosen when creating the keystore |
-| `KEY_ALIAS` | Alias chosen when creating the keystore |
-| `KEY_PASSWORD` | Key password (often same as keystore password) |
+| `KEYSTORE_BASE64` | `base64 -w 0 kraken-release.jks` |
+| `KEYSTORE_PASSWORD` | Keystore password |
+| `KEY_ALIAS` | Key alias |
+| `KEY_PASSWORD` | Key password |
 
-If you don't have a keystore yet, create one (keep the `.jks` file safe and
-**never commit it**):
+Create a keystore if you don't have one:
 
 ```bash
 keytool -genkeypair -v \
@@ -112,23 +135,52 @@ keytool -genkeypair -v \
   -validity 10000
 ```
 
-### Security notes
+## BDD test suite
 
-- The decoded keystore is written to `$RUNNER_TEMP` (an ephemeral, isolated
-  directory on the GitHub-hosted runner) and deleted immediately after the build
-  via an `if: always()` cleanup step.
-- `permissions: contents: write` is scoped only to the release job and is required
-  solely to create the GitHub Release — it maps to a short-lived `GITHUB_TOKEN`.
-- For stricter supply-chain security, consider pinning `softprops/action-gh-release`
-  to a commit SHA instead of the `@v2` tag. Find the latest SHA at
-  `github.com/softprops/action-gh-release/releases`.
+Gherkin feature files define the user-facing behavior:
 
-### APK format — why not AAB?
+| Feature | Scenarios | CI-safe |
+|---|---|---|
+| `photo_capture.feature` | Shutter press, camera launch, focus | Partial (state assertions run, gesture assertions skip without device) |
+| `video_recording.feature` | Mode switching, start/stop recording | Partial |
+| `gallery_and_delete.feature` | Gallery navigation, photo deletion | `@device-only` scenarios require real Google Photos |
+| `gallery_intent.feature` | MediaStore query, intent construction | Full (seeds emulator MediaStore, asserts URI + MIME type) |
 
-AAB (Android App Bundle) is a Play Store-only publishing format. It cannot be
-installed directly on a device — the Play Store unbundles it at install time.
-Since Kraken Bridge is distributed via GitHub Releases and sideloaded, APK is the
-correct and only viable format.
+Scenarios tagged `@device-only` or `@manual` are excluded from CI. Run them on a physical device:
+
+```bash
+adb shell am instrument -w \
+  -e tags '@device-only' \
+  com.krakenbridge.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner
+```
+
+## Publishing to Google Play
+
+The release workflow produces a signed AAB artifact (`kraken-bridge-<version>-playstore-aab`). To publish:
+
+1. Create a release tag and wait for CI to complete
+2. Download the AAB artifact from the GitHub Actions run
+3. Go to [Google Play Console](https://play.google.com/console) > **Production** > **Create new release**
+4. Upload the `.aab` file
+5. Fill in release notes and submit for review
+
+### Play Store listing prerequisites
+
+Before submitting, you'll need:
+
+- [ ] App icon (512x512 PNG)
+- [ ] Feature graphic (1024x500 PNG)
+- [ ] At least 2 screenshots (phone)
+- [ ] Short description (80 chars max)
+- [ ] Full description
+- [ ] Privacy policy URL (required for apps using Bluetooth and accessibility)
+- [ ] Content rating questionnaire completed
+- [ ] Target audience and content declaration
+- [ ] App category: Photography or Tools
+
+### Accessibility service declaration
+
+Google Play requires a declaration explaining why the app uses an accessibility service. The justification: Kraken Bridge uses the accessibility service to inject tap gestures and key events into Google Camera and Google Photos on behalf of the user, who cannot touch the screen while the phone is sealed inside a dive housing. No user data is collected, read, or transmitted.
 
 ## License
 
