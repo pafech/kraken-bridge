@@ -64,8 +64,11 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/release.jks"
 
-      - name: Build signed release APK
-        run: ./gradlew assembleRelease --no-daemon
+      # Build both the APK (for GitHub Releases / sideloading) and the AAB
+      # (Android App Bundle, required by Google Play Store).
+      # Both are signed with the same upload keystore configured above.
+      - name: Build signed release APK + AAB
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -79,14 +82,26 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
 
+      # Upload the APK artifact (GitHub Releases + direct sideloading)
       - name: Upload release APK as artifact
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
         with:
-          name: kraken-bridge-${{ env.VERSION_NAME }}
+          name: kraken-bridge-${{ env.VERSION_NAME }}-apk
           path: app/build/outputs/apk/release/*.apk
           retention-days: 30
 
+      # Upload the AAB artifact (Google Play Store upload)
+      # To publish: go to Play Console → Production → Create new release → upload this .aab
+      - name: Upload release AAB as artifact
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
+        with:
+          name: kraken-bridge-${{ env.VERSION_NAME }}-playstore-aab
+          path: app/build/outputs/bundle/release/*.aab
+          retention-days: 30
+
       # Only publish a GitHub Release when triggered by a tag push (not workflow_dispatch)
+      # The APK is attached for direct download / sideloading by end-users.
+      # The AAB is NOT attached to the GitHub Release (it is for Play Store upload only).
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1

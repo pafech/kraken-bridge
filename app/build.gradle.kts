@@ -17,6 +17,17 @@ android {
         // back to the literals below so gradle sync still works without env vars.
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toIntOrNull() ?: 1
         versionName = System.getenv("VERSION_NAME") ?: "1.0"
+
+        // Cucumber-Android discovers features from assets/features/ and step definitions
+        // by scanning the test APK. Tags filter which scenarios run in CI vs. on device.
+        testInstrumentationRunner = "io.cucumber.android.runner.CucumberAndroidJUnitRunner"
+        testInstrumentationRunnerArguments["tags"] = "not @device-only and not @manual"
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
     }
 
     // Signing config reads from environment variables injected by the release workflow.
@@ -74,8 +85,29 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    
+
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    // ── Unit tests ───────────────────────────────────────────────────────────
+    testImplementation("junit:junit:4.13.2")
+
+    // ── Instrumented / BDD tests ─────────────────────────────────────────────
+    // Cucumber-Android: Gherkin BDD runner for instrumented tests.
+    // Features live in src/androidTest/assets/features/
+    // Step definitions are auto-discovered in the test APK via annotation scanning.
+    androidTestImplementation("io.cucumber:cucumber-android:7.14.0")
+
+    // UIAutomator – cross-app interaction (Google Camera, Google Photos)
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+
+    // AndroidX test infrastructure
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+
+    // Espresso – in-app UI assertions for the Kraken Bridge activity itself
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }
