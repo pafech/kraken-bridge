@@ -5,6 +5,7 @@ import android.bluetooth.*
 import android.bluetooth.le.*
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.*
 import android.util.Log
 import android.view.KeyEvent
@@ -49,7 +50,12 @@ class KrakenBleService : Service() {
         // Actions for binding
         const val ACTION_CONNECT = "com.krakenbridge.CONNECT"
         const val ACTION_DISCONNECT = "com.krakenbridge.DISCONNECT"
+        const val ACTION_RECONNECT = "com.krakenbridge.RECONNECT"
         const val ACTION_STATUS = "com.krakenbridge.STATUS"
+
+        // SharedPreferences key for persisting last connected device MAC
+        private const val PREFS_NAME = "kraken_ble"
+        private const val PREF_LAST_DEVICE_MAC = "last_device_mac"
         
         // Broadcast actions
         const val BROADCAST_STATUS = "com.krakenbridge.STATUS_UPDATE"
@@ -61,6 +67,7 @@ class KrakenBleService : Service() {
     @Volatile private var bluetoothGatt: BluetoothGatt? = null
     @Volatile private var scanning = false
     private val handler = Handler(Looper.getMainLooper())
+    private lateinit var prefs: SharedPreferences
     
     // Wake lock to keep device awake while connected
     private var wakeLock: PowerManager.WakeLock? = null
@@ -136,6 +143,7 @@ class KrakenBleService : Service() {
                     broadcastStatus("connected", "Connected to Kraken")
                     acquireConnectionWakeLock()
                     lastConnectedDevice = gatt.device
+                    persistDeviceMac(gatt.device.address)
                     isUserDisconnect = false
                     reconnectAttempts = 0  // Successful connection resets backoff counter
                     startConnectionMonitoring()
@@ -236,7 +244,7 @@ class KrakenBleService : Service() {
         // Check if there's already an instance running
         if (instance != null && instance != this) {
             Log.w(TAG, "Another service instance detected - stopping old instance")
-            instance?.disconnect()
+            instance?.userDisconnect()
         }
         instance = this
 
@@ -245,22 +253,55 @@ class KrakenBleService : Service() {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        // Restore last connected device from disk so reconnection survives process death
+        val savedMac = prefs.getString(PREF_LAST_DEVICE_MAC, null)
+        if (savedMac != null && lastConnectedDevice == null) {
+            lastConnectedDevice = bluetoothAdapter?.getRemoteDevice(savedMac)
+            Log.i(TAG, "Restored last connected device: $savedMac")
+        }
+
         Log.i(TAG, "Service instance created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_CONNECT -> {
-                // Reset all state flags when starting a new connection
+                // User-initiated: reset state, scan for any Kraken device
                 resetState()
                 startForeground(NOTIFICATION_ID, createNotification("Connecting..."))
                 startScan()
             }
             ACTION_DISCONNECT -> {
-                disconnect()
+                userDisconnect()
+            }
+            ACTION_RECONNECT -> {
+                // Boot receiver or external trigger: reconnect to persisted device
+                startForeground(NOTIFICATION_ID, createNotification("Reconnecting..."))
+                reconnectToPersistedDevice()
+            }
+            null -> {
+                // START_STICKY restart after process kill: Android delivers null intent.
+                // Must call startForeground within 5s or the system kills us again.
+                startForeground(NOTIFICATION_ID, createNotification("Reconnecting..."))
+                reconnectToPersistedDevice()
             }
         }
         return START_STICKY
+    }
+
+    private fun reconnectToPersistedDevice() {
+        val device = lastConnectedDevice
+        if (device != null) {
+            Log.i(TAG, "Reconnecting to persisted device: ${device.address}")
+            isUserDisconnect = false
+            reconnectAttempts = 0
+            connectToDevice(device)
+        } else {
+            Log.w(TAG, "No persisted device to reconnect to — scanning")
+            startScan()
+        }
     }
 
     private fun resetState() {
@@ -284,7 +325,9 @@ class KrakenBleService : Service() {
         if (instance == this) {
             instance = null
         }
-        disconnect()
+        // System is tearing down the service — release resources but keep
+        // the persisted MAC so START_STICKY or BOOT_COMPLETED can reconnect.
+        releaseResources()
         Log.i(TAG, "Service instance destroyed")
     }
 
@@ -750,9 +793,26 @@ class KrakenBleService : Service() {
         }
     }
 
-    private fun disconnect() {
+    /**
+     * User-initiated disconnect: clear persisted MAC, release resources, stop service.
+     * After this, no automatic reconnection will happen.
+     */
+    private fun userDisconnect() {
         Log.i(TAG, "User requested disconnect")
         isUserDisconnect = true
+        clearPersistedDeviceMac()
+        releaseResources()
+        lastConnectedDevice = null
+        broadcastStatus("disconnected", "Disconnected")
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    /**
+     * Release BLE and wake lock resources without clearing the persisted MAC.
+     * Called from [onDestroy] (system teardown) and [userDisconnect].
+     */
+    private fun releaseResources() {
         cameraIsOpen = false
         isGalleryMode = false
         isRecording = false
@@ -760,15 +820,22 @@ class KrakenBleService : Service() {
         stopConnectionMonitoring()
         releaseConnectionWakeLock()
         releaseVideoRecordingWakeLock()
+        handler.removeCallbacksAndMessages(null)
         bluetoothGatt?.let {
             it.disconnect()
             it.close()
         }
         bluetoothGatt = null
-        lastConnectedDevice = null
-        broadcastStatus("disconnected", "Disconnected")
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+    }
+
+    private fun persistDeviceMac(mac: String) {
+        prefs.edit().putString(PREF_LAST_DEVICE_MAC, mac).apply()
+        Log.d(TAG, "Persisted device MAC: $mac")
+    }
+
+    private fun clearPersistedDeviceMac() {
+        prefs.edit().remove(PREF_LAST_DEVICE_MAC).apply()
+        Log.d(TAG, "Cleared persisted device MAC")
     }
 
     // ── Test-only hooks ──────────────────────────────────────────────────────
