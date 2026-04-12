@@ -13,6 +13,7 @@ import android.provider.MediaStore
 import android.util.Log
 import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import java.util.*
 
 class KrakenBleService : Service() {
@@ -614,6 +615,12 @@ class KrakenBleService : Service() {
                 Log.e(TAG, "No viewer available for $uri: ${e.message}")
             }
         } else {
+            if (hasPartialMediaAccess()) {
+                Log.w(TAG, "Partial media access detected — MediaStore returned empty")
+                broadcastStatus("ready", "Limited photo access — grant full access in app settings")
+                openAppSettings()
+                return
+            }
             Log.w(TAG, "No media found on device — opening Google Photos home")
         }
 
@@ -664,7 +671,38 @@ class KrakenBleService : Service() {
         }
         return null
     }
-    
+
+    /**
+     * Detect Android 14+ partial photo access: permissions are technically "granted"
+     * but the user chose "Select photos" instead of "Allow all", so MediaStore
+     * returns only the hand-picked subset (often empty for recent captures).
+     */
+    private fun hasPartialMediaAccess(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
+        val hasImages = ContextCompat.checkSelfPermission(
+            this, android.Manifest.permission.READ_MEDIA_IMAGES
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val hasUserSelected = ContextCompat.checkSelfPermission(
+            this, "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        // If READ_MEDIA_VISUAL_USER_SELECTED is granted but READ_MEDIA_IMAGES is not,
+        // the user picked "Select photos" — partial access.
+        // If both are granted, we have full access but MediaStore is genuinely empty.
+        return hasUserSelected && !hasImages
+    }
+
+    private fun openAppSettings() {
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open app settings: ${e.message}")
+        }
+    }
+
     private fun toggleCameraMode() {
         // If switching away from video mode while recording, release wake lock
         if (isRecording) {
@@ -917,6 +955,9 @@ class KrakenBleService : Service() {
      * Only intended for use in instrumented BDD tests.
      */
     internal fun simulateButtonPress(code: Int) = handleButtonEvent(code)
+
+    /** Query the most recent media file from MediaStore. */
+    internal fun testQueryLatestMedia(): Pair<Uri, String>? = queryLatestMedia()
 
     // ────────────────────────────────────────────────────────────────────────
 

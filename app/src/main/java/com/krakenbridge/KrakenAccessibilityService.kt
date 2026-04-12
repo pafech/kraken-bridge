@@ -657,36 +657,6 @@ class KrakenAccessibilityService : AccessibilityService() {
             }
         }, null)
     }
-    
-    /**
-     * Open the photo gallery by clicking the thumbnail button
-     */
-    fun openGallery() {
-        Log.i(TAG, "Opening gallery")
-
-        // Try to find the thumbnail/gallery button by resource ID
-        var node = findNodeByResourceId("com.google.android.GoogleCamera:id/thumbnail_button")
-
-        // Fallback: try by content description
-        if (node == null) {
-            node = findNodeByContentDescription("gallery", exactMatch = false)
-                ?: findNodeByContentDescription("photo gallery", exactMatch = false)
-        }
-
-        if (node != null) {
-            // Try to click the node directly
-            if (!clickNode(node)) {
-                // If direct click fails, try tapping at node's center coordinates
-                getNodeCenter(node)?.let { (x, y) ->
-                    Log.i(TAG, "Direct click failed, tapping gallery button at ($x, $y)")
-                    dispatchTap(x, y)
-                }
-            }
-        } else {
-            Log.w(TAG, "Could not find gallery button - may already be in gallery or button not visible")
-        }
-    }
-
     /**
      * Swipe left/right to navigate photos in Google Photos
      * @param next true = swipe left (next photo), false = swipe right (previous photo)
@@ -726,46 +696,6 @@ class KrakenAccessibilityService : AccessibilityService() {
         }, null)
     }
     
-    // ==================== Google Photos Functions ====================
-
-    /**
-     * Tap on the most recent photo in Google Photos grid view.
-     * Prefers accessibility node discovery so the tap is screen-size independent;
-     * falls back to proportional coordinates if the grid is not yet accessible.
-     */
-    fun tapRecentPhoto() {
-        val root = rootInActiveWindow
-        if (root != null) {
-            // Collect clickable nodes in the upper grid area (excludes status/nav bars)
-            val gridItems = mutableListOf<AccessibilityNodeInfo>()
-            collectClickableNodesInRegion(
-                root,
-                0f, screenWidth.toFloat(),
-                screenHeight * 0.10f, screenHeight * 0.45f,
-                gridItems
-            )
-            if (gridItems.isNotEmpty()) {
-                // Sort top-left first — most recent photo in a reverse-chronological grid
-                val topLeft = gridItems.minWithOrNull(compareBy(
-                    { val r = Rect(); it.getBoundsInScreen(r); r.top },
-                    { val r = Rect(); it.getBoundsInScreen(r); r.left }
-                ))
-                topLeft?.let {
-                    val rect = Rect()
-                    it.getBoundsInScreen(rect)
-                    Log.i(TAG, "Tapping most recent photo via accessibility at (${rect.exactCenterX()}, ${rect.exactCenterY()})")
-                    dispatchTap(rect.exactCenterX(), rect.exactCenterY())
-                    return
-                }
-            }
-        }
-        // Coordinate fallback if accessibility tree is empty or not yet loaded
-        val x = screenWidth * 0.12f
-        val y = screenHeight * 0.24f
-        Log.w(TAG, "Accessibility grid search failed, using coordinate fallback ($x, $y)")
-        dispatchTap(x, y)
-    }
-
     /**
      * Click the trash/bin button in Google Photos single photo view.
      *
