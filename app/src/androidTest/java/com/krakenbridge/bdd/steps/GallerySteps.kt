@@ -10,7 +10,6 @@ import io.cucumber.java.en.And
 import io.cucumber.java.en.Given
 import io.cucumber.java.en.Then
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
 
 /**
  * Step definitions for Google Photos gallery navigation and deletion scenarios.
@@ -91,15 +90,6 @@ class GallerySteps {
         assertNotNull("Google Photos should have been launched", launched)
     }
 
-    @Then("Google Camera is launched")
-    fun assertGoogleCameraLaunched() {
-        val launched = device.wait(
-            Until.hasObject(By.pkg(GOOGLE_CAMERA_PKG).depth(0)),
-            LAUNCH_TIMEOUT_MS
-        )
-        assertNotNull("Google Camera should have been launched", launched)
-    }
-
     @Then("the most recent photo is selected")
     fun assertMostRecentPhotoSelected() {
         accessibilityService ?: return  // skip in CI
@@ -172,9 +162,6 @@ class GallerySteps {
         accessibilityService ?: return  // skip in CI
         check(optionLabel.isNotBlank()) { "Expected option label to be non-empty" }
     }
-
-    @Then("the delete confirmation is tapped")
-    fun assertDeleteConfirmation() = andDeleteConfirmationTapped()
 
     @Then("the photo is moved to the trash within {int} seconds")
     fun assertPhotoDeletedWithinSeconds(seconds: Int) {
