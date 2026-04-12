@@ -166,17 +166,15 @@ The release workflow produces a signed AAB artifact (`kraken-bridge-<version>-pl
 
 ### Play Store listing prerequisites
 
-Before submitting, you'll need:
-
-- [ ] App icon (512x512 PNG)
-- [ ] Feature graphic (1024x500 PNG)
-- [ ] At least 2 screenshots (phone)
-- [ ] Short description (80 chars max)
-- [ ] Full description
-- [ ] Privacy policy URL (required for apps using Bluetooth and accessibility)
-- [ ] Content rating questionnaire completed
-- [ ] Target audience and content declaration
-- [ ] App category: Photography or Tools
+- [x] App icon (512x512 PNG)
+- [x] Feature graphic (1024x500 PNG)
+- [x] At least 2 screenshots (phone)
+- [x] Short description (80 chars)
+- [x] Full description
+- [x] Privacy policy URL: `https://pafech.github.io/kraken-bridge/privacy-policy.html`
+- [ ] Content rating questionnaire (IARC, completed in Play Console)
+- [ ] Target audience and content declaration (18+, no ads, no IAP)
+- [x] App category: Photography
 
 ### Accessibility service declaration
 

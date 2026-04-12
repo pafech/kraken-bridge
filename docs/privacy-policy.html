@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kraken Bridge - Privacy Policy</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      max-width: 640px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      line-height: 1.6;
+      color: #1a1a1a;
+    }
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.15rem; margin-top: 2rem; }
+    p, ul { margin: 0.75rem 0; }
+    .updated { color: #666; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+
+<h1>Kraken Bridge - Privacy Policy</h1>
+<p class="updated">Last updated: 12 April 2026</p>
+
+<h2>Summary</h2>
+<p>Kraken Bridge does not collect, store, or transmit any personal data. The app runs entirely on your device.</p>
+
+<h2>What the app does</h2>
+<p>Kraken Bridge connects to a Kraken dive housing via Bluetooth Low Energy (BLE) and translates button presses into camera actions on your phone. It interacts with Google Camera and Google Photos on your behalf using Android's accessibility service.</p>
+
+<h2>Data handling</h2>
+<ul>
+  <li><strong>Bluetooth:</strong> The app stores the MAC address of your last connected Kraken housing on the device (in SharedPreferences) so it can reconnect automatically. This data never leaves your device.</li>
+  <li><strong>Photos and videos:</strong> The app queries Android's MediaStore to find your most recent capture and open it in Google Photos. It does not read, copy, upload, or modify your photos or videos.</li>
+  <li><strong>Accessibility service:</strong> The accessibility service injects tap gestures and key events into Google Camera and Google Photos. It does not read, log, or transmit any screen content, text, or user interface data from any app.</li>
+  <li><strong>Network:</strong> The app does not make any network requests. It has no internet permission and no server-side component.</li>
+  <li><strong>Analytics:</strong> None. No crash reporting, no usage tracking, no telemetry.</li>
+</ul>
+
+<h2>Third-party services</h2>
+<p>None. The app has no dependencies on third-party SDKs, analytics, advertising, or cloud services.</p>
+
+<h2>Children</h2>
+<p>The app is not directed at children. It is a tool for scuba divers using a Kraken underwater housing.</p>
+
+<h2>Changes to this policy</h2>
+<p>If this policy changes, the updated version will be published at this URL. The "last updated" date at the top reflects the most recent revision.</p>
+
+<h2>Contact</h2>
+<p>For questions about this privacy policy, open an issue at <a href="https://github.com/pafech/kraken-bridge/issues">github.com/pafech/kraken-bridge/issues</a>.</p>
+
+</body>
+</html>
