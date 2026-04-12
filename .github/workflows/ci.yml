@@ -111,35 +111,10 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
-          # Build both APKs, install, enable the accessibility service, then run BDD scenarios.
-          # Tags filter: run @smoke and any untagged scenarios; skip @device-only and @manual.
-          script: |
-            ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
-
-            adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-
-            # Grant the accessibility service permission via shell (runs before any test)
-            adb shell settings put secure enabled_accessibility_services com.krakenbridge/com.krakenbridge.KrakenAccessibilityService
-            adb shell settings put secure accessibility_enabled 1
-            sleep 2
-
-            # Run Cucumber scenarios – exclude device-only and manual tags.
-            # Capture exit code: adb instrument returns non-zero on test failure or crash.
-            set +e
-            adb shell am instrument -w -e tags "not @device-only and not @manual" com.krakenbridge.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner | tee /tmp/bdd-output.txt
-            INSTRUMENT_EXIT=$?
-            set -e
-
-            # Fail on instrument exit code OR on FAILURES in output (belt and suspenders)
-            if [ $INSTRUMENT_EXIT -ne 0 ]; then
-              echo "::error::Instrumentation exited with code $INSTRUMENT_EXIT"
-              exit 1
-            fi
-            if grep -q "FAILURES\|Error in" /tmp/bdd-output.txt; then
-              echo "::error::BDD test failures detected in output"
-              exit 1
-            fi
+          # The script lives in its own file because android-emulator-runner may
+          # execute each line as a separate shell invocation, breaking multi-line
+          # constructs (if/fi, variable capture, line continuations).
+          script: bash .github/scripts/run-bdd-tests.sh
 
       - name: Pull Cucumber XML reports
         if: always()
