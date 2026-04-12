@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["main", "feature/**", "claude/**"]
+    branches: ["main", "feature/**"]
   pull_request:
     branches: ["main"]
 
@@ -105,7 +105,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Run BDD tests on emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@e89f39f1abbbd05b1113a29cf4db69e7540cae5a # v2
         with:
           api-level: 34
           target: google_apis
@@ -120,19 +120,26 @@ jobs:
             adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 
             # Grant the accessibility service permission via shell (runs before any test)
-            adb shell settings put secure enabled_accessibility_services \
-              com.krakenbridge/com.krakenbridge.KrakenAccessibilityService
+            adb shell settings put secure enabled_accessibility_services com.krakenbridge/com.krakenbridge.KrakenAccessibilityService
             adb shell settings put secure accessibility_enabled 1
             sleep 2
 
-            # Run Cucumber scenarios – exclude device-only and manual tags
-            adb shell am instrument -w \
-              -e tags "not @device-only and not @manual" \
-              com.krakenbridge.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner \
-              | tee /tmp/bdd-output.txt
+            # Run Cucumber scenarios – exclude device-only and manual tags.
+            # Capture exit code: adb instrument returns non-zero on test failure or crash.
+            set +e
+            adb shell am instrument -w -e tags "not @device-only and not @manual" com.krakenbridge.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner | tee /tmp/bdd-output.txt
+            INSTRUMENT_EXIT=$?
+            set -e
 
-            # Fail the build if any scenarios failed
-            grep -q "FAILURES!!!" /tmp/bdd-output.txt && exit 1 || exit 0
+            # Fail on instrument exit code OR on FAILURES in output (belt and suspenders)
+            if [ $INSTRUMENT_EXIT -ne 0 ]; then
+              echo "::error::Instrumentation exited with code $INSTRUMENT_EXIT"
+              exit 1
+            fi
+            if grep -q "FAILURES\|Error in" /tmp/bdd-output.txt; then
+              echo "::error::BDD test failures detected in output"
+              exit 1
+            fi
 
       - name: Pull Cucumber XML reports
         if: always()

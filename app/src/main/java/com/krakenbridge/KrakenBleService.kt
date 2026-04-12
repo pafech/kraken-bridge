@@ -496,11 +496,13 @@ class KrakenBleService : Service() {
                 Log.i(TAG, "Gallery: delete triggered")
             }
             BTN_FN_PRESS -> {
-                // Fn in gallery = dump accessibility tree for debugging
-                // View with: adb logcat -s KrakenA11y:I
-                val accessibilityService = KrakenAccessibilityService.instance
-                accessibilityService?.dumpAccessibilityTree()
-                Log.i(TAG, "Gallery: dumping accessibility tree to logcat")
+                if (BuildConfig.DEBUG) {
+                    // Fn in gallery = dump accessibility tree for debugging
+                    // View with: adb logcat -s KrakenA11y:I
+                    val accessibilityService = KrakenAccessibilityService.instance
+                    accessibilityService?.dumpAccessibilityTree()
+                    Log.i(TAG, "Gallery: dumping accessibility tree to logcat")
+                }
             }
             BTN_SHUTTER_PRESS, BTN_BACK_PRESS -> {
                 // Shutter or Back = return to camera
