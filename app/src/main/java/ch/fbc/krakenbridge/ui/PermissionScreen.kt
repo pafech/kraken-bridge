@@ -22,11 +22,13 @@ data class PermissionGroupState(
 fun PermissionScreen(
     groups: List<PermissionGroupState>,
     batteryOptimizationExempt: Boolean,
+    accessibilityEnabled: Boolean,
     onGrantGroup: (String) -> Unit,
     onGrantBattery: () -> Unit,
+    onEnableAccessibility: () -> Unit,
     onContinue: () -> Unit
 ) {
-    val allGranted = groups.all { it.isGranted } && batteryOptimizationExempt
+    val allGranted = groups.all { it.isGranted } && batteryOptimizationExempt && accessibilityEnabled
 
     Column(
         modifier = Modifier
@@ -70,6 +72,15 @@ fun PermissionScreen(
             reason = "Keep the BLE connection alive during your dive",
             isGranted = batteryOptimizationExempt,
             onGrant = onGrantBattery
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        PermissionRow(
+            name = "Accessibility",
+            reason = "Control camera apps via housing buttons",
+            isGranted = accessibilityEnabled,
+            onGrant = onEnableAccessibility
         )
 
         Spacer(modifier = Modifier.weight(1f))

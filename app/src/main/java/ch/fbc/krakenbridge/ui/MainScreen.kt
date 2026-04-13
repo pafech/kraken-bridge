@@ -2,6 +2,8 @@ package ch.fbc.krakenbridge.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -17,12 +19,10 @@ import ch.fbc.krakenbridge.BuildConfig
 fun MainScreen(
     status: String,
     message: String,
-    accessibilityEnabled: Boolean,
     showHelpDialog: Boolean,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenCamera: () -> Unit,
-    onEnableAccessibility: () -> Unit,
     onShowHelp: () -> Unit,
     onDismissHelp: () -> Unit
 ) {
@@ -72,14 +72,9 @@ fun MainScreen(
         )
         
         Spacer(modifier = Modifier.height(24.dp))
-        
-        // Accessibility Service Status
-        if (!accessibilityEnabled) {
-            AccessibilityWarningCard(onEnableAccessibility)
-        }
-        
+
         // Status indicator
-        StatusCard(status, statusColor, message, accessibilityEnabled)
+        StatusCard(status, statusColor, message)
         
         Spacer(modifier = Modifier.weight(1f))
         
@@ -89,7 +84,13 @@ fun MainScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Text("? Button Mapping", fontSize = 16.sp)
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.List,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Button Mapping", fontSize = 16.sp)
         }
         
         Spacer(modifier = Modifier.weight(1f))
@@ -108,49 +109,10 @@ fun MainScreen(
 }
 
 @Composable
-private fun AccessibilityWarningCard(onEnableAccessibility: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF3E2723)),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "⚠️ Accessibility Required",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFFFAB00)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Enable the accessibility service to allow button presses to control camera apps",
-                fontSize = 14.sp,
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Button(
-                onClick = onEnableAccessibility,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFAB00)),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("Enable Accessibility", color = Color.Black)
-            }
-        }
-    }
-}
-
-@Composable
 private fun StatusCard(
     status: String,
     statusColor: Color,
-    message: String,
-    accessibilityEnabled: Boolean
+    message: String
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -184,15 +146,6 @@ private fun StatusCard(
                 color = Color.Gray,
                 textAlign = TextAlign.Center
             )
-            
-            if (accessibilityEnabled) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "✓ Accessibility enabled",
-                    fontSize = 12.sp,
-                    color = Color(0xFF4CAF50)
-                )
-            }
         }
     }
 }
