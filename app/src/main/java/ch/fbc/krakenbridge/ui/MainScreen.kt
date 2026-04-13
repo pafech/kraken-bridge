@@ -2,8 +2,8 @@ package ch.fbc.krakenbridge.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -85,7 +85,7 @@ fun MainScreen(
             shape = RoundedCornerShape(12.dp)
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.List,
+                imageVector = ListIcon,
                 contentDescription = null,
                 modifier = Modifier.size(20.dp)
             )
@@ -212,4 +212,22 @@ private fun ActionButtons(
             }
         }
     }
+}
+
+// Inline list icon — avoids pulling in material-icons-extended (4+ MB)
+private val ListIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f
+    ).apply {
+        path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
+            // Three horizontal lines with bullet points (Material "List" icon)
+            moveTo(3f, 13f); lineTo(3f, 11f); lineTo(5f, 11f); lineTo(5f, 13f); close()
+            moveTo(3f, 17f); lineTo(3f, 15f); lineTo(5f, 15f); lineTo(5f, 17f); close()
+            moveTo(3f, 9f); lineTo(3f, 7f); lineTo(5f, 7f); lineTo(5f, 9f); close()
+            moveTo(7f, 13f); lineTo(7f, 11f); lineTo(21f, 11f); lineTo(21f, 13f); close()
+            moveTo(7f, 17f); lineTo(7f, 15f); lineTo(21f, 15f); lineTo(21f, 17f); close()
+            moveTo(7f, 7f); lineTo(21f, 7f); lineTo(21f, 9f); lineTo(7f, 9f); close()
+        }
+    }.build()
 }
