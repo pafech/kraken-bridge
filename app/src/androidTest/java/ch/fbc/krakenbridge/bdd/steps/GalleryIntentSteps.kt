@@ -1,11 +1,11 @@
-package com.krakenbridge.bdd.steps
+package ch.fbc.krakenbridge.bdd.steps
 
 import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
-import com.krakenbridge.KrakenBleService
+import ch.fbc.krakenbridge.KrakenBleService
 import io.cucumber.java.en.And
 import io.cucumber.java.en.Given
 import io.cucumber.java.en.Then

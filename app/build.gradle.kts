@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.krakenbridge"
+    namespace = "ch.fbc.krakenbridge"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.krakenbridge"
+        applicationId = "ch.fbc.krakenbridge"
         minSdk = 26
         targetSdk = 36
         // In CI the release workflow injects VERSION_CODE (github.run_number, monotonically

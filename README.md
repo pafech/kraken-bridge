@@ -151,7 +151,7 @@ Scenarios tagged `@device-only` or `@manual` are excluded from CI. Run them on a
 ```bash
 adb shell am instrument -w \
   -e tags '@device-only' \
-  com.krakenbridge.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner
+  ch.fbc.krakenbridge.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner
 ```
 
 ## Publishing to Google Play

@@ -1,4 +1,4 @@
-package com.krakenbridge.bdd
+package ch.fbc.krakenbridge.bdd
 
 import io.cucumber.android.runner.CucumberAndroidJUnitRunner
 
@@ -10,7 +10,7 @@ import io.cucumber.android.runner.CucumberAndroidJUnitRunner
  * running individual scenarios from Android Studio.
  *
  * Features  : src/androidTest/assets/features/
- * Glue code : com.krakenbridge.bdd.steps  (auto-discovered by annotation scanning)
+ * Glue code : ch.fbc.krakenbridge.bdd.steps  (auto-discovered by annotation scanning)
  *
  * Tag filtering is configured in build.gradle.kts via
  *   testInstrumentationRunnerArguments["tags"] = "not @device-only and not @manual"

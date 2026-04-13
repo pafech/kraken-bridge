@@ -10,7 +10,7 @@ adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 
 # Grant the accessibility service permission
 adb shell settings put secure enabled_accessibility_services \
-  com.krakenbridge/com.krakenbridge.KrakenAccessibilityService
+  ch.fbc.krakenbridge/ch.fbc.krakenbridge.KrakenAccessibilityService
 adb shell settings put secure accessibility_enabled 1
 sleep 2
 
@@ -18,7 +18,7 @@ sleep 2
 set +e
 adb shell am instrument -w \
   -e tags 'not @device-only and not @manual' \
-  com.krakenbridge.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner \
+  ch.fbc.krakenbridge.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner \
   | tee /tmp/bdd-output.txt
 INSTRUMENT_EXIT=$?
 set -e

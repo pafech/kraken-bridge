@@ -1,6 +1,6 @@
-package com.krakenbridge.bdd.steps
+package ch.fbc.krakenbridge.bdd.steps
 
-import com.krakenbridge.KrakenBleService
+import ch.fbc.krakenbridge.KrakenBleService
 import io.cucumber.java.en.Then
 import io.cucumber.java.en.When
 

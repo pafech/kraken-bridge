@@ -1,4 +1,4 @@
-package com.krakenbridge
+package ch.fbc.krakenbridge
 
 import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
@@ -20,8 +20,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import com.krakenbridge.ui.KrakenBridgeTheme
-import com.krakenbridge.ui.MainScreen
+import ch.fbc.krakenbridge.ui.KrakenBridgeTheme
+import ch.fbc.krakenbridge.ui.MainScreen
 
 class MainActivity : ComponentActivity() {
 

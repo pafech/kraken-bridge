@@ -1,4 +1,4 @@
-package com.krakenbridge.ui
+package ch.fbc.krakenbridge.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
