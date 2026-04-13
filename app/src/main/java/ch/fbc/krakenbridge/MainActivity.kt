@@ -22,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import ch.fbc.krakenbridge.ui.KrakenBridgeTheme
 import ch.fbc.krakenbridge.ui.MainScreen
+import ch.fbc.krakenbridge.ui.PermissionGroupState
+import ch.fbc.krakenbridge.ui.PermissionScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -29,6 +31,13 @@ class MainActivity : ComponentActivity() {
     private var statusMessage by mutableStateOf("Not connected")
     private var accessibilityEnabled by mutableStateOf(false)
     private var showHelpDialog by mutableStateOf(false)
+    private var allPermissionsGranted by mutableStateOf(false)
+    private var batteryOptimizationExempt by mutableStateOf(false)
+
+    private var bluetoothGranted by mutableStateOf(false)
+    private var locationGranted by mutableStateOf(false)
+    private var mediaGranted by mutableStateOf(false)
+    private var notificationsGranted by mutableStateOf(false)
 
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -39,38 +48,74 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val permissionLauncher = registerForActivityResult(
+    private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.values.all { it }
-        if (allGranted) {
-            startConnection()
-        } else {
-            Toast.makeText(this, "Bluetooth permissions required", Toast.LENGTH_LONG).show()
-        }
-    }
+    ) { refreshPermissionState() }
+
+    private val locationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { refreshPermissionState() }
+
+    private val mediaPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { refreshPermissionState() }
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { refreshPermissionState() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         setContent {
             KrakenBridgeTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen(
-                        status = connectionStatus,
-                        message = statusMessage,
-                        accessibilityEnabled = accessibilityEnabled,
-                        showHelpDialog = showHelpDialog,
-                        onConnect = { checkPermissionsAndConnect() },
-                        onDisconnect = { stopConnection() },
-                        onOpenCamera = { openGoogleCamera() },
-                        onEnableAccessibility = { openAccessibilitySettings() },
-                        onShowHelp = { showHelpDialog = true },
-                        onDismissHelp = { showHelpDialog = false }
-                    )
+                    if (allPermissionsGranted) {
+                        MainScreen(
+                            status = connectionStatus,
+                            message = statusMessage,
+                            accessibilityEnabled = accessibilityEnabled,
+                            showHelpDialog = showHelpDialog,
+                            onConnect = { startConnection() },
+                            onDisconnect = { stopConnection() },
+                            onOpenCamera = { openGoogleCamera() },
+                            onEnableAccessibility = { openAccessibilitySettings() },
+                            onShowHelp = { showHelpDialog = true },
+                            onDismissHelp = { showHelpDialog = false }
+                        )
+                    } else {
+                        PermissionScreen(
+                            groups = listOf(
+                                PermissionGroupState(
+                                    name = "Bluetooth",
+                                    reason = "Connect to your dive housing remote",
+                                    isGranted = bluetoothGranted
+                                ),
+                                PermissionGroupState(
+                                    name = "Location",
+                                    reason = "Required by Android for Bluetooth scanning",
+                                    isGranted = locationGranted
+                                ),
+                                PermissionGroupState(
+                                    name = "Media",
+                                    reason = "Browse your captures in gallery mode",
+                                    isGranted = mediaGranted
+                                ),
+                                PermissionGroupState(
+                                    name = "Notifications",
+                                    reason = "Show connection status while diving",
+                                    isGranted = notificationsGranted
+                                )
+                            ),
+                            batteryOptimizationExempt = batteryOptimizationExempt,
+                            onGrantGroup = { group -> requestGroupPermission(group) },
+                            onGrantBattery = { requestBatteryOptimization() },
+                            onContinue = { allPermissionsGranted = true }
+                        )
+                    }
                 }
             }
         }
@@ -80,24 +125,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         val filter = IntentFilter(KrakenBleService.BROADCAST_STATUS)
         registerReceiver(statusReceiver, filter, RECEIVER_NOT_EXPORTED)
-        
-        // Check accessibility service status
         accessibilityEnabled = isAccessibilityServiceEnabled()
-    }
-    
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-        return enabledServices.any { 
-            it.resolveInfo.serviceInfo.packageName == packageName &&
-            it.resolveInfo.serviceInfo.name == KrakenAccessibilityService::class.java.name
-        }
-    }
-    
-    private fun openAccessibilitySettings() {
-        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-        startActivity(intent)
-        Toast.makeText(this, "Enable \"Kraken Bridge\" accessibility service", Toast.LENGTH_LONG).show()
+        refreshPermissionState()
     }
 
     override fun onPause() {
@@ -109,46 +138,70 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkPermissionsAndConnect() {
-        val permissions = mutableListOf<String>()
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions.add(Manifest.permission.BLUETOOTH_SCAN)
-            permissions.add(Manifest.permission.BLUETOOTH_CONNECT)
+    private fun refreshPermissionState() {
+        bluetoothGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            isGranted(Manifest.permission.BLUETOOTH_SCAN) &&
+                isGranted(Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            true
         }
-        permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-            permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
-            permissions.add(Manifest.permission.READ_MEDIA_VIDEO)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                permissions.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+
+        locationGranted = isGranted(Manifest.permission.ACCESS_FINE_LOCATION)
+
+        mediaGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            isGranted(Manifest.permission.READ_MEDIA_IMAGES) &&
+                isGranted(Manifest.permission.READ_MEDIA_VIDEO)
+        } else {
+            isGranted(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+
+        notificationsGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            isGranted(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            true
+        }
+
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        batteryOptimizationExempt = pm.isIgnoringBatteryOptimizations(packageName)
+
+        allPermissionsGranted = bluetoothGranted && locationGranted &&
+            mediaGranted && notificationsGranted && batteryOptimizationExempt
+    }
+
+    private fun isGranted(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun requestGroupPermission(group: String) {
+        when (group) {
+            "Bluetooth" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                bluetoothPermissionLauncher.launch(
+                    arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+                )
             }
-        } else {
-            permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-
-        val notGranted = permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (notGranted.isEmpty()) {
-            startConnection()
-        } else {
-            permissionLauncher.launch(notGranted.toTypedArray())
+            "Location" -> locationPermissionLauncher.launch(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+            )
+            "Media" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val permissions = mutableListOf(
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_VIDEO
+                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    permissions.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+                }
+                mediaPermissionLauncher.launch(permissions.toTypedArray())
+            } else {
+                mediaPermissionLauncher.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
+            }
+            "Notifications" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                notificationPermissionLauncher.launch(
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS)
+                )
+            }
         }
     }
 
-    private fun startConnection() {
-        requestBatteryOptimizationIfNeeded()
-        val intent = Intent(this, KrakenBleService::class.java).apply {
-            action = KrakenBleService.ACTION_CONNECT
-        }
-        startForegroundService(intent)
-    }
-
-    private fun requestBatteryOptimizationIfNeeded() {
+    private fun requestBatteryOptimization() {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         if (!pm.isIgnoringBatteryOptimizations(packageName)) {
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
@@ -156,6 +209,28 @@ class MainActivity : ComponentActivity() {
             }
             startActivity(intent)
         }
+    }
+
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        return enabledServices.any {
+            it.resolveInfo.serviceInfo.packageName == packageName &&
+                it.resolveInfo.serviceInfo.name == KrakenAccessibilityService::class.java.name
+        }
+    }
+
+    private fun openAccessibilitySettings() {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        startActivity(intent)
+        Toast.makeText(this, "Enable \"Kraken Bridge\" accessibility service", Toast.LENGTH_LONG).show()
+    }
+
+    private fun startConnection() {
+        val intent = Intent(this, KrakenBleService::class.java).apply {
+            action = KrakenBleService.ACTION_CONNECT
+        }
+        startForegroundService(intent)
     }
 
     private fun stopConnection() {
@@ -167,14 +242,12 @@ class MainActivity : ComponentActivity() {
 
     private fun openGoogleCamera() {
         try {
-            // Try to open Google Camera specifically
             val intent = Intent(Intent.ACTION_MAIN).apply {
                 setPackage("com.google.android.GoogleCamera")
                 addCategory(Intent.CATEGORY_LAUNCHER)
             }
             startActivity(intent)
         } catch (e: Exception) {
-            // Fallback to any camera app
             try {
                 val intent = Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
                 startActivity(intent)
