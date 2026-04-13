@@ -458,7 +458,7 @@ class KrakenAccessibilityService : AccessibilityService() {
         instance = this
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         updateScreenDimensions()
-        Log.i(TAG, "Accessibility service v${BuildInfo.VERSION} created, screen: ${screenWidth}x${screenHeight}")
+        Log.i(TAG, "Accessibility service v${BuildConfig.VERSION_NAME} created, screen: ${screenWidth}x${screenHeight}")
     }
 
     override fun onServiceConnected() {
