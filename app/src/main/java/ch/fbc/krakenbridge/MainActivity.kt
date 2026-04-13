@@ -77,12 +77,10 @@ class MainActivity : ComponentActivity() {
                         MainScreen(
                             status = connectionStatus,
                             message = statusMessage,
-                            accessibilityEnabled = accessibilityEnabled,
                             showHelpDialog = showHelpDialog,
                             onConnect = { startConnection() },
                             onDisconnect = { stopConnection() },
                             onOpenCamera = { openGoogleCamera() },
-                            onEnableAccessibility = { openAccessibilitySettings() },
                             onShowHelp = { showHelpDialog = true },
                             onDismissHelp = { showHelpDialog = false }
                         )
@@ -111,8 +109,10 @@ class MainActivity : ComponentActivity() {
                                 )
                             ),
                             batteryOptimizationExempt = batteryOptimizationExempt,
+                            accessibilityEnabled = accessibilityEnabled,
                             onGrantGroup = { group -> requestGroupPermission(group) },
                             onGrantBattery = { requestBatteryOptimization() },
+                            onEnableAccessibility = { openAccessibilitySettings() },
                             onContinue = { allPermissionsGranted = true }
                         )
                     }
@@ -165,7 +165,8 @@ class MainActivity : ComponentActivity() {
         batteryOptimizationExempt = pm.isIgnoringBatteryOptimizations(packageName)
 
         allPermissionsGranted = bluetoothGranted && locationGranted &&
-            mediaGranted && notificationsGranted && batteryOptimizationExempt
+            mediaGranted && notificationsGranted && batteryOptimizationExempt &&
+            accessibilityEnabled
     }
 
     private fun isGranted(permission: String): Boolean =
