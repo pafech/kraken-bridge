@@ -1,11 +1,11 @@
-package com.krakenbridge.bdd.steps
+package ch.fbc.krakenbridge.bdd.steps
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
-import com.krakenbridge.KrakenAccessibilityService
-import com.krakenbridge.KrakenBleService
+import ch.fbc.krakenbridge.KrakenAccessibilityService
+import ch.fbc.krakenbridge.KrakenBleService
 import io.cucumber.java.en.And
 import io.cucumber.java.en.Given
 import io.cucumber.java.en.Then

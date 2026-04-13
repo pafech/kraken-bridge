@@ -1,4 +1,4 @@
-package com.krakenbridge
+package ch.fbc.krakenbridge
 
 import android.content.BroadcastReceiver
 import android.content.Context

@@ -1,4 +1,4 @@
-package com.krakenbridge.ui
+package ch.fbc.krakenbridge.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,7 +11,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.krakenbridge.BuildInfo
+import ch.fbc.krakenbridge.BuildInfo
 
 @Composable
 fun MainScreen(

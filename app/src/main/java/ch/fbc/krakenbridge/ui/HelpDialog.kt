@@ -1,4 +1,4 @@
-package com.krakenbridge.ui
+package ch.fbc.krakenbridge.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*

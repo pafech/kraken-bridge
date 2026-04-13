@@ -1,4 +1,4 @@
-package com.krakenbridge
+package ch.fbc.krakenbridge
 
 import android.app.*
 import android.bluetooth.*
@@ -52,17 +52,17 @@ class KrakenBleService : Service() {
         const val BTN_MINUS_RELEASE = 0x50
 
         // Actions for binding
-        const val ACTION_CONNECT = "com.krakenbridge.CONNECT"
-        const val ACTION_DISCONNECT = "com.krakenbridge.DISCONNECT"
-        const val ACTION_RECONNECT = "com.krakenbridge.RECONNECT"
-        const val ACTION_STATUS = "com.krakenbridge.STATUS"
+        const val ACTION_CONNECT = "ch.fbc.krakenbridge.CONNECT"
+        const val ACTION_DISCONNECT = "ch.fbc.krakenbridge.DISCONNECT"
+        const val ACTION_RECONNECT = "ch.fbc.krakenbridge.RECONNECT"
+        const val ACTION_STATUS = "ch.fbc.krakenbridge.STATUS"
 
         // SharedPreferences key for persisting last connected device MAC
         private const val PREFS_NAME = "kraken_ble"
         private const val PREF_LAST_DEVICE_MAC = "last_device_mac"
         
         // Broadcast actions
-        const val BROADCAST_STATUS = "com.krakenbridge.STATUS_UPDATE"
+        const val BROADCAST_STATUS = "ch.fbc.krakenbridge.STATUS_UPDATE"
         const val EXTRA_STATUS = "status"
         const val EXTRA_MESSAGE = "message"
     }

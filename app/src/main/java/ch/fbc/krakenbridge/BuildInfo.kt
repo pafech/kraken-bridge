@@ -1,4 +1,4 @@
-package com.krakenbridge
+package ch.fbc.krakenbridge
 
 /**
  * Shared build information for the app

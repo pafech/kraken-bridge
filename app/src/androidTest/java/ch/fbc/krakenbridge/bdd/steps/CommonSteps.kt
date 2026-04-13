@@ -1,8 +1,8 @@
-package com.krakenbridge.bdd.steps
+package ch.fbc.krakenbridge.bdd.steps
 
 import androidx.test.platform.app.InstrumentationRegistry
-import com.krakenbridge.KrakenAccessibilityService
-import com.krakenbridge.KrakenBleService
+import ch.fbc.krakenbridge.KrakenAccessibilityService
+import ch.fbc.krakenbridge.KrakenBleService
 import io.cucumber.java.After
 import io.cucumber.java.Before
 import io.cucumber.java.en.Given
@@ -25,7 +25,7 @@ class CommonSteps {
     @Before
     fun enableAccessibilityServiceAndWait() {
         shell("settings put secure enabled_accessibility_services " +
-                "com.krakenbridge/com.krakenbridge.KrakenAccessibilityService")
+                "ch.fbc.krakenbridge/ch.fbc.krakenbridge.KrakenAccessibilityService")
         shell("settings put secure accessibility_enabled 1")
 
         // Give the system up to 5 s to bind the service

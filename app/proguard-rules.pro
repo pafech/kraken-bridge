@@ -1,2 +1,2 @@
 # Keep BLE service
--keep class com.krakenbridge.KrakenBleService { *; }
+-keep class ch.fbc.krakenbridge.KrakenBleService { *; }

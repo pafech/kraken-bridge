@@ -1,4 +1,4 @@
-package com.krakenbridge
+package ch.fbc.krakenbridge
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
@@ -32,12 +32,12 @@ class KrakenAccessibilityService : AccessibilityService() {
         const val TAG = "KrakenA11y"
         
         // Action to request key injection
-        const val ACTION_INJECT_KEY = "com.krakenbridge.INJECT_KEY"
+        const val ACTION_INJECT_KEY = "ch.fbc.krakenbridge.INJECT_KEY"
         const val EXTRA_KEY_CODE = "keyCode"
         
         // Action to check if service is running
-        const val ACTION_CHECK_SERVICE = "com.krakenbridge.CHECK_A11Y_SERVICE"
-        const val BROADCAST_SERVICE_STATUS = "com.krakenbridge.A11Y_SERVICE_STATUS"
+        const val ACTION_CHECK_SERVICE = "ch.fbc.krakenbridge.CHECK_A11Y_SERVICE"
+        const val BROADCAST_SERVICE_STATUS = "ch.fbc.krakenbridge.A11Y_SERVICE_STATUS"
         const val EXTRA_IS_RUNNING = "isRunning"
         
         @Volatile
