@@ -48,11 +48,10 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
-            // Bundle native debug symbols into the AAB so Play Console can
-            // de-symbolicate native stack traces in ANRs/crashes.
-            ndk {
-                debugSymbolLevel = "FULL"
-            }
+            // No ndk.debugSymbolLevel: this project has no own NDK code. The only
+            // .so in the AAB comes from androidx.graphics:graphics-path (transitive
+            // Compose dep) and ships stripped, so AGP cannot extract symbols.
+            // Play Console's "native debug symbols" warning is inherent here.
             // Only attach signing config when the env vars are present (i.e. in CI)
             if (!System.getenv("KEYSTORE_PATH").isNullOrBlank()) {
                 signingConfig = signingConfigs.getByName("release")

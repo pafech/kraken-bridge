@@ -99,15 +99,10 @@ jobs:
           path: app/build/outputs/bundle/release/*.aab
           retention-days: 30
 
-      # R8 mapping file — upload to Play Console under the same release to
-      # de-obfuscate future crash/ANR stack traces. Keep longer than the AAB
-      # because crashes can be reported well after release.
-      - name: Upload R8 mapping file
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        with:
-          name: kraken-bridge-${{ env.VERSION_NAME }}-mapping
-          path: app/build/outputs/mapping/release/mapping.txt
-          retention-days: 90
+      # Note: no separate mapping.txt upload step. The R8 mapping file is
+      # bundled into the AAB at BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map
+      # (automatic for AGP >= 4.1). Play Console extracts it directly from the
+      # uploaded bundle, so a separate artifact would be redundant.
 
       # Only publish a GitHub Release when triggered by a tag push (not workflow_dispatch)
       # The APK is attached for direct download / sideloading by end-users.
