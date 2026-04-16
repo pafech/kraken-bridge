@@ -99,6 +99,16 @@ jobs:
           path: app/build/outputs/bundle/release/*.aab
           retention-days: 30
 
+      # R8 mapping file — upload to Play Console under the same release to
+      # de-obfuscate future crash/ANR stack traces. Keep longer than the AAB
+      # because crashes can be reported well after release.
+      - name: Upload R8 mapping file
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
+        with:
+          name: kraken-bridge-${{ env.VERSION_NAME }}-mapping
+          path: app/build/outputs/mapping/release/mapping.txt
+          retention-days: 90
+
       # Only publish a GitHub Release when triggered by a tag push (not workflow_dispatch)
       # The APK is attached for direct download / sideloading by end-users.
       # The AAB is NOT attached to the GitHub Release (it is for Play Store upload only).
