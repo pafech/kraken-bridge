@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up JDK 17
-        uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v5.2.0
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -84,7 +84,7 @@ jobs:
 
       # Upload the APK artifact (GitHub Releases + direct sideloading)
       - name: Upload release APK as artifact
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: kraken-bridge-${{ env.VERSION_NAME }}-apk
           path: app/build/outputs/apk/release/*.apk
@@ -93,7 +93,7 @@ jobs:
       # Upload the AAB artifact (Google Play Store upload)
       # To publish: go to Play Console → Production → Create new release → upload this .aab
       - name: Upload release AAB as artifact
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: kraken-bridge-${{ env.VERSION_NAME }}-playstore-aab
           path: app/build/outputs/bundle/release/*.aab
@@ -103,7 +103,7 @@ jobs:
       # de-obfuscate future crash/ANR stack traces. Keep longer than the AAB
       # because crashes can be reported well after release.
       - name: Upload R8 mapping file
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: kraken-bridge-${{ env.VERSION_NAME }}-mapping
           path: app/build/outputs/mapping/release/mapping.txt
