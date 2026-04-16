@@ -47,7 +47,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            // Bundle native debug symbols into the AAB so Play Console can
+            // de-symbolicate native stack traces in ANRs/crashes.
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
             // Only attach signing config when the env vars are present (i.e. in CI)
             if (!System.getenv("KEYSTORE_PATH").isNullOrBlank()) {
                 signingConfig = signingConfigs.getByName("release")
