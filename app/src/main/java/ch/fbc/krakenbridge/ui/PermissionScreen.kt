@@ -30,6 +30,8 @@ fun PermissionScreen(
 ) {
     val allGranted = groups.all { it.isGranted } && batteryOptimizationExempt && accessibilityEnabled
 
+    Box(modifier = Modifier.fillMaxSize()) {
+    WaveBackground()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -39,7 +41,7 @@ fun PermissionScreen(
         Spacer(modifier = Modifier.height(48.dp))
 
         Text(
-            text = "Kraken Bridge",
+            text = "Kraken Dive Photo",
             fontSize = 32.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
@@ -97,6 +99,7 @@ fun PermissionScreen(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+    }
     }
 }
 

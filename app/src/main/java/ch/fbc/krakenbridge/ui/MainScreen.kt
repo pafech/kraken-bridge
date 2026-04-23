@@ -32,7 +32,7 @@ fun MainScreen(
     }
     val isConnected = status == "connected" || status == "ready"
     val isConnecting = status == "scanning" || status == "connecting" || status == "reconnecting"
-    
+
     val statusColor = when (status) {
         "ready" -> Color(0xFF4CAF50)
         "connected" -> Color(0xFF8BC34A)
@@ -42,6 +42,8 @@ fun MainScreen(
         else -> Color(0xFF9E9E9E)
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
+    WaveBackground()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -53,14 +55,14 @@ fun MainScreen(
         
         // Title
         Text(
-            text = "Kraken Bridge",
+            text = "Kraken Dive Photo",
             fontSize = 32.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
-        
+
         Text(
-            text = "BLE to Camera Bridge",
+            text = "Kraken Underwater Housing Control",
             fontSize = 16.sp,
             color = Color.Gray
         )
@@ -105,6 +107,7 @@ fun MainScreen(
         )
         
         Spacer(modifier = Modifier.height(16.dp))
+    }
     }
 }
 
