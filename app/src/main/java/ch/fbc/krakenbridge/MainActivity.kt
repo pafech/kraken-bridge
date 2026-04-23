@@ -224,7 +224,7 @@ class MainActivity : ComponentActivity() {
     private fun openAccessibilitySettings() {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         startActivity(intent)
-        Toast.makeText(this, "Enable \"Kraken Bridge\" accessibility service", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Enable \"Kraken Dive Photo\" accessibility service", Toast.LENGTH_LONG).show()
     }
 
     private fun startConnection() {

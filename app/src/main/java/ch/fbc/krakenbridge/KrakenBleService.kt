@@ -354,7 +354,7 @@ class KrakenBleService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Kraken Bridge")
+            .setContentTitle("Kraken Dive Photo")
             .setContentText(status)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(pendingIntent)

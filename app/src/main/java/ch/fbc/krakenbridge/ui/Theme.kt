@@ -5,18 +5,25 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
+val OceanSurface = Color(0xFF0B3C5D)
+val OceanDeep = Color(0xFF061A2A)
+val OceanCard = Color(0xFF0E4461)
+val OceanAqua = Color(0xFF4FC3F7)
+val OceanAquaLight = Color(0xFF81D4FA)
+val OceanText = Color(0xFFE1F5FE)
+
 @Composable
 fun KrakenBridgeTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = Color(0xFF00BCD4),
-            secondary = Color(0xFF03A9F4),
-            background = Color(0xFF121212),
-            surface = Color(0xFF1E1E1E),
-            onPrimary = Color.White,
-            onSecondary = Color.White,
-            onBackground = Color.White,
-            onSurface = Color.White
+            primary = OceanAqua,
+            secondary = OceanAquaLight,
+            background = OceanDeep,
+            surface = OceanCard,
+            onPrimary = OceanDeep,
+            onSecondary = OceanDeep,
+            onBackground = OceanText,
+            onSurface = OceanText
         ),
         content = content
     )
