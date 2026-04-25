@@ -64,13 +64,13 @@ fun MainScreen(
         Text(
             text = "Kraken Underwater Housing Control",
             fontSize = 16.sp,
-            color = Color.Gray
+            color = OceanTextMuted
         )
 
         Text(
             text = "v${BuildConfig.VERSION_NAME}",
             fontSize = 12.sp,
-            color = Color.Gray.copy(alpha = 0.6f)
+            color = OceanTextMuted.copy(alpha = 0.85f)
         )
         
         Spacer(modifier = Modifier.height(24.dp))
@@ -146,7 +146,7 @@ private fun StatusCard(
             Text(
                 text = message,
                 fontSize = 14.sp,
-                color = Color.Gray,
+                color = OceanTextMuted,
                 textAlign = TextAlign.Center
             )
         }

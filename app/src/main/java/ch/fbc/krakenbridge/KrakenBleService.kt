@@ -745,17 +745,29 @@ class KrakenBleService : Service() {
     }
     
     private fun wakeScreen() {
-        @Suppress("DEPRECATION")
-        val screenWakeLock = powerManager.newWakeLock(
-            PowerManager.FULL_WAKE_LOCK or
-            PowerManager.ACQUIRE_CAUSES_WAKEUP or
-            PowerManager.ON_AFTER_RELEASE,
-            "KrakenBridge:ScreenWake"
+        // Brief CPU wake lock — the activity launch needs the CPU running for
+        // a moment while the system processes turn-screen-on + dismiss-keyguard.
+        val cpuWakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "KrakenBridge:WakeBoot"
         )
-        screenWakeLock.acquire(30000)
+        cpuWakeLock.acquire(3000)
         handler.postDelayed({
-            if (screenWakeLock.isHeld) screenWakeLock.release()
-        }, 30000)
+            if (cpuWakeLock.isHeld) cpuWakeLock.release()
+        }, 3000)
+
+        try {
+            val intent = Intent(this, KrakenWakeActivity::class.java).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                )
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "wakeScreen: failed to launch wake activity: ${e.message}")
+        }
     }
     
     private fun openCamera() {

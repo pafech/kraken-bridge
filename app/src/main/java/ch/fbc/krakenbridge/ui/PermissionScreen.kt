@@ -52,7 +52,7 @@ fun PermissionScreen(
         Text(
             text = "Grant these permissions before your dive — you won't be able to do it underwater.",
             fontSize = 14.sp,
-            color = Color.Gray,
+            color = OceanTextMuted,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
@@ -135,7 +135,7 @@ private fun PermissionRow(
                 Text(
                     text = reason,
                     fontSize = 12.sp,
-                    color = Color.Gray
+                    color = OceanTextMuted
                 )
             }
 

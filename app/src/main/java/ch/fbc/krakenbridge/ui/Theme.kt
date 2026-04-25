@@ -11,6 +11,10 @@ val OceanCard = Color(0xFF0E4461)
 val OceanAqua = Color(0xFF4FC3F7)
 val OceanAquaLight = Color(0xFF81D4FA)
 val OceanText = Color(0xFFE1F5FE)
+// Secondary/de-emphasised text. Pale aqua hits ~8:1 on OceanCard and ~12:1
+// on OceanDeep — well clear of WCAG AA (4.5:1) for body text. Replaces the
+// previous Color.Gray which was below AA on the dark surface cards.
+val OceanTextMuted = Color(0xFFB3E5FC)
 
 @Composable
 fun KrakenBridgeTheme(content: @Composable () -> Unit) {
