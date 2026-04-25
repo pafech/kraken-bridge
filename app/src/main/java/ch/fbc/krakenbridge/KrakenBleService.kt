@@ -54,7 +54,6 @@ class KrakenBleService : Service() {
         // Actions for binding
         const val ACTION_CONNECT = "ch.fbc.krakenbridge.CONNECT"
         const val ACTION_DISCONNECT = "ch.fbc.krakenbridge.DISCONNECT"
-        const val ACTION_RECONNECT = "ch.fbc.krakenbridge.RECONNECT"
         const val ACTION_STATUS = "ch.fbc.krakenbridge.STATUS"
 
         // SharedPreferences key for persisting last connected device MAC
@@ -280,14 +279,12 @@ class KrakenBleService : Service() {
             ACTION_DISCONNECT -> {
                 userDisconnect()
             }
-            ACTION_RECONNECT -> {
-                // Boot receiver or external trigger: reconnect to persisted device
-                startForeground(NOTIFICATION_ID, createNotification("Reconnecting..."))
-                reconnectToPersistedDevice()
-            }
             null -> {
-                // START_STICKY restart after process kill: Android delivers null intent.
-                // Must call startForeground within 5s or the system kills us again.
+                // START_STICKY restart after system process kill (e.g. OOM):
+                // Android delivers a null intent. Must call startForeground within
+                // 5s or the system kills us again. User-initiated closes (Disconnect
+                // button, swipe from Recents) clear the persisted MAC, so this path
+                // only triggers after an unintended kill.
                 startForeground(NOTIFICATION_ID, createNotification("Reconnecting..."))
                 reconnectToPersistedDevice()
             }
@@ -346,7 +343,7 @@ class KrakenBleService : Service() {
             instance = null
         }
         // System is tearing down the service — release resources but keep
-        // the persisted MAC so START_STICKY or BOOT_COMPLETED can reconnect.
+        // the persisted MAC so START_STICKY can reconnect after an OOM-kill.
         releaseResources()
         Log.i(TAG, "Service instance destroyed")
     }
