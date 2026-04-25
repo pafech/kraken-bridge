@@ -324,6 +324,22 @@ class KrakenBleService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /**
+     * User swiped the app out of Recents (or used Force Stop). Treat this as
+     * an explicit "App geschlossen" — same semantics as the Disconnect button:
+     * clear persisted MAC, release BLE/wake locks, stop the foreground service.
+     * No auto-reconnect, no boot-restart.
+     *
+     * Without this override, START_STICKY would silently keep the service
+     * alive after the user removed the task — a "ghost state" the user
+     * cannot see in Recents but still shows the foreground notification.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.i(TAG, "Task removed (app swiped from Recents) — treating as user disconnect")
+        userDisconnect()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         if (instance == this) {
