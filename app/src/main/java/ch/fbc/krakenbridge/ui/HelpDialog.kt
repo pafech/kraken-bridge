@@ -79,7 +79,7 @@ fun HelpRow(button: String, action: String) {
         Text(
             text = action,
             fontSize = 14.sp,
-            color = Color.Gray,
+            color = OceanTextMuted,
             modifier = Modifier.weight(1.5f),
             textAlign = TextAlign.End
         )

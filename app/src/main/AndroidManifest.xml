@@ -44,6 +44,19 @@
             </intent-filter>
         </activity>
 
+        <!-- Transparent wake activity: woken via startActivity() from the BLE
+             service when a housing button is pressed while the screen is off.
+             Replaces deprecated FULL_WAKE_LOCK / ACQUIRE_CAUSES_WAKEUP. -->
+        <activity
+            android:name=".KrakenWakeActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.KrakenBridge.Wake"/>
+
         <service
             android:name=".KrakenBleService"
             android:enabled="true"
