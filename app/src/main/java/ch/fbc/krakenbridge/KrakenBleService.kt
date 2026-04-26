@@ -1,5 +1,6 @@
 package ch.fbc.krakenbridge
 
+import android.annotation.SuppressLint
 import android.app.*
 import android.bluetooth.*
 import android.bluetooth.le.*
@@ -14,8 +15,23 @@ import android.util.Log
 import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import java.util.*
 
+/**
+ * Foreground BLE service for the Kraken housing.
+ *
+ * MissingPermission is suppressed at class scope: every BLE call here
+ * (scan, connect, GATT read/write, disconnect) is reachable only after
+ * the user has completed the permission walkthrough in [MainActivity],
+ * which gates startService() on BLUETOOTH_SCAN + BLUETOOTH_CONNECT (and
+ * the legacy ACCESS_FINE_LOCATION on API < 31). The activity will not
+ * launch this service if any of those are missing, so per-call checks
+ * would be redundant defensive code — and would fragment the contract
+ * across many call sites instead of stating it once, here.
+ */
+@SuppressLint("MissingPermission")
 class KrakenBleService : Service() {
 
     companion object {
@@ -707,7 +723,7 @@ class KrakenBleService : Service() {
     private fun openAppSettings() {
         try {
             val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = Uri.parse("package:$packageName")
+                data = "package:$packageName".toUri()
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
@@ -948,12 +964,12 @@ class KrakenBleService : Service() {
     }
 
     private fun persistDeviceMac(mac: String) {
-        prefs.edit().putString(PREF_LAST_DEVICE_MAC, mac).apply()
+        prefs.edit { putString(PREF_LAST_DEVICE_MAC, mac) }
         Log.d(TAG, "Persisted device MAC: $mac")
     }
 
     private fun clearPersistedDeviceMac() {
-        prefs.edit().remove(PREF_LAST_DEVICE_MAC).apply()
+        prefs.edit { remove(PREF_LAST_DEVICE_MAC) }
         Log.d(TAG, "Cleared persisted device MAC")
     }
 
