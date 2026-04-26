@@ -2,9 +2,9 @@ package ch.fbc.krakenbridge
 
 import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.annotation.SuppressLint
 import android.content.*
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -20,6 +20,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import ch.fbc.krakenbridge.ui.KrakenBridgeTheme
 import ch.fbc.krakenbridge.ui.MainScreen
 import ch.fbc.krakenbridge.ui.PermissionGroupState
@@ -130,8 +131,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Status broadcast is package-internal (sender uses setPackage(packageName)),
+        // so the receiver must be NOT_EXPORTED. ContextCompat handles the API 33+
+        // flag requirement and the no-op behaviour on older releases.
         val filter = IntentFilter(KrakenBleService.BROADCAST_STATUS)
-        registerReceiver(statusReceiver, filter, RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(
+            this, statusReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         accessibilityEnabled = isAccessibilityServiceEnabled()
         refreshPermissionState()
     }
@@ -258,6 +264,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * BatteryLife suppression: the BLE foreground service must keep the
+     * connection alive for the duration of a dive (up to ~4 h). Doze /
+     * App Standby will tear the GATT down within minutes if the user
+     * doesn't grant the exemption, which is exactly the use case Play
+     * Store policy permits for "device companion" apps.
+     */
+    @SuppressLint("BatteryLife")
     private fun launchBatteryOptimization() {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         if (pm.isIgnoringBatteryOptimizations(packageName)) {
@@ -265,7 +279,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-            data = Uri.parse("package:$packageName")
+            data = "package:$packageName".toUri()
         }
         systemSettingsLauncher.launch(intent)
     }
