@@ -39,6 +39,12 @@ class MainActivity : ComponentActivity() {
     private var mediaGranted by mutableStateOf(false)
     private var notificationsGranted by mutableStateOf(false)
 
+    // Drives the single-CTA walkthrough: once the user taps Continue we run each
+    // pending request sequentially, advancing in each launcher's callback. We
+    // stop as soon as a step fails to grant so the user isn't trapped in a loop.
+    private var walkthroughActive = false
+    private var lastWalkthroughStep: String? = null
+
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             intent?.let {
@@ -50,19 +56,23 @@ class MainActivity : ComponentActivity() {
 
     private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { refreshPermissionState() }
+    ) { onPermissionStepFinished() }
 
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { refreshPermissionState() }
+    ) { onPermissionStepFinished() }
 
     private val mediaPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { refreshPermissionState() }
+    ) { onPermissionStepFinished() }
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { refreshPermissionState() }
+    ) { onPermissionStepFinished() }
+
+    private val systemSettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { onPermissionStepFinished() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -110,10 +120,7 @@ class MainActivity : ComponentActivity() {
                             ),
                             batteryOptimizationExempt = batteryOptimizationExempt,
                             accessibilityEnabled = accessibilityEnabled,
-                            onGrantGroup = { group -> requestGroupPermission(group) },
-                            onGrantBattery = { requestBatteryOptimization() },
-                            onEnableAccessibility = { openAccessibilitySettings() },
-                            onContinue = { allPermissionsGranted = true }
+                            onContinue = { startPermissionWalkthrough() }
                         )
                     }
                 }
@@ -172,12 +179,49 @@ class MainActivity : ComponentActivity() {
     private fun isGranted(permission: String): Boolean =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
-    private fun requestGroupPermission(group: String) {
-        when (group) {
+    private fun startPermissionWalkthrough() {
+        walkthroughActive = true
+        lastWalkthroughStep = null
+        advanceWalkthrough()
+    }
+
+    private fun advanceWalkthrough() {
+        if (!walkthroughActive) return
+        refreshPermissionState()
+        val nextStep = nextPendingStep()
+        if (nextStep == null) {
+            walkthroughActive = false
+            allPermissionsGranted = true
+            return
+        }
+        // If the same step is still pending after we just requested it, the user
+        // declined or the system blocked it — stop so they can decide what to do.
+        if (nextStep == lastWalkthroughStep) {
+            walkthroughActive = false
+            return
+        }
+        lastWalkthroughStep = nextStep
+        runWalkthroughStep(nextStep)
+    }
+
+    private fun nextPendingStep(): String? = when {
+        !bluetoothGranted -> "Bluetooth"
+        !locationGranted -> "Location"
+        !mediaGranted -> "Media"
+        !notificationsGranted -> "Notifications"
+        !batteryOptimizationExempt -> "Battery"
+        !accessibilityEnabled -> "Accessibility"
+        else -> null
+    }
+
+    private fun runWalkthroughStep(step: String) {
+        when (step) {
             "Bluetooth" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 bluetoothPermissionLauncher.launch(
                     arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
                 )
+            } else {
+                onPermissionStepFinished()
             }
             "Location" -> locationPermissionLauncher.launch(
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -198,18 +242,32 @@ class MainActivity : ComponentActivity() {
                 notificationPermissionLauncher.launch(
                     arrayOf(Manifest.permission.POST_NOTIFICATIONS)
                 )
+            } else {
+                onPermissionStepFinished()
             }
+            "Battery" -> launchBatteryOptimization()
+            "Accessibility" -> launchAccessibilitySettings()
         }
     }
 
-    private fun requestBatteryOptimization() {
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = Uri.parse("package:$packageName")
-            }
-            startActivity(intent)
+    private fun onPermissionStepFinished() {
+        if (walkthroughActive) {
+            advanceWalkthrough()
+        } else {
+            refreshPermissionState()
         }
+    }
+
+    private fun launchBatteryOptimization() {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (pm.isIgnoringBatteryOptimizations(packageName)) {
+            onPermissionStepFinished()
+            return
+        }
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        systemSettingsLauncher.launch(intent)
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {
@@ -221,10 +279,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun openAccessibilitySettings() {
+    private fun launchAccessibilitySettings() {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-        startActivity(intent)
         Toast.makeText(this, "Enable \"Kraken Dive Photo\" accessibility service", Toast.LENGTH_LONG).show()
+        systemSettingsLauncher.launch(intent)
     }
 
     private fun startConnection() {
