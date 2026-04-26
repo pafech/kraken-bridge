@@ -1,20 +1,49 @@
 package ch.fbc.krakenbridge.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.path
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ch.fbc.krakenbridge.BuildConfig
+
+private enum class ConnectionPhase { Idle, Busy, Ready }
 
 @Composable
 fun MainScreen(
@@ -23,71 +52,113 @@ fun MainScreen(
     showHelpDialog: Boolean,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
-    onOpenCamera: () -> Unit,
     onShowHelp: () -> Unit,
     onDismissHelp: () -> Unit
 ) {
     if (showHelpDialog) {
         HelpDialog(onDismiss = onDismissHelp)
     }
-    val isConnected = status == "connected" || status == "ready"
-    val isConnecting = status == "scanning" || status == "connecting" || status == "reconnecting"
-
-    val statusColor = when (status) {
-        "ready" -> Color(0xFF4CAF50)
-        "connected" -> Color(0xFF8BC34A)
-        "scanning", "connecting" -> Color(0xFFFFC107)
-        "reconnecting" -> Color(0xFFFF9800)
-        "error" -> Color(0xFFF44336)
-        else -> Color(0xFF9E9E9E)
+    val phase = when (status) {
+        "scanning", "connecting", "reconnecting" -> ConnectionPhase.Busy
+        "connected", "ready" -> ConnectionPhase.Ready
+        else -> ConnectionPhase.Idle
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         WaveBackground()
+
+        // Top — app identity. Status bar inset + extra clearance for the
+        // front-facing camera punch-hole.
+        Text(
+            text = "Kraken Dive Photo",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 32.dp)
+        )
+
+        // Centre — the hero. Big circle anchors the screen visually and
+        // physically. Tap = action (connect / cancel). State word and
+        // info sit directly below in descending visual weight.
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .align(Alignment.Center)
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
+            HeroCircle(
+                phase = phase,
+                onTap = {
+                    when (phase) {
+                        ConnectionPhase.Idle -> onConnect()
+                        ConnectionPhase.Busy -> onDisconnect()
+                        ConnectionPhase.Ready -> Unit
+                    }
+                }
+            )
 
-            // Compact header — title shrinks so it doesn't compete with the
-            // hero (status + primary CTA) for attention.
+            Spacer(modifier = Modifier.height(28.dp))
+
             Text(
-                text = "Kraken Dive Photo",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                text = status.replaceFirstChar { it.uppercase() },
+                fontSize = 28.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground
             )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             Text(
-                text = "v${BuildConfig.VERSION_NAME}",
-                fontSize = 11.sp,
-                color = OceanTextMuted.copy(alpha = 0.85f)
+                text = subInfo(phase, status, message),
+                fontSize = 14.sp,
+                color = OceanTextMuted,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
             )
+        }
 
-            // Push hero block toward the optical centre (~40% from top).
-            Spacer(modifier = Modifier.weight(1f))
-
-            HeroSection(
-                status = status,
-                statusColor = statusColor,
-                message = message,
-                isConnected = isConnected,
-                isConnecting = isConnecting,
-                onConnect = onConnect,
-                onDisconnect = onDisconnect,
-                onOpenCamera = onOpenCamera
-            )
-
-            Spacer(modifier = Modifier.weight(1.2f))
-
-            // Secondary action — visually quiet so it never competes with
-            // the primary connect/disconnect CTA.
-            TextButton(
-                onClick = onShowHelp,
-                modifier = Modifier.padding(bottom = 8.dp)
+        // Bottom — secondary action (when relevant) + help link.
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            AnimatedVisibility(
+                visible = phase == ConnectionPhase.Ready,
+                enter = fadeIn(tween(280, delayMillis = 450)) +
+                    expandVertically(tween(280, delayMillis = 450)),
+                exit = fadeOut(tween(120)) + shrinkVertically(tween(180))
             ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .border(
+                                width = 1.dp,
+                                color = OceanTextMuted.copy(alpha = 0.35f),
+                                shape = CircleShape
+                            )
+                            .clickable(onClick = onDisconnect),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = BluetoothDisabledIcon,
+                            contentDescription = "Disconnect",
+                            tint = OceanTextMuted,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+
+            TextButton(onClick = onShowHelp) {
                 Icon(
                     imageVector = ListIcon,
                     contentDescription = null,
@@ -101,133 +172,278 @@ fun MainScreen(
                     color = OceanTextMuted
                 )
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }
 
+// Sub-info logic: prefer service messages when they carry information
+// beyond the status word (errors, "Limited photo access…"); otherwise
+// fall back to per-phase guidance.
+private fun subInfo(phase: ConnectionPhase, status: String, message: String): String {
+    val carriesNewInfo = message.isNotBlank() &&
+        !message.lowercase().startsWith(status.lowercase())
+    if (carriesNewInfo) return message
+    return when (phase) {
+        ConnectionPhase.Idle -> "Tap the circle to connect"
+        ConnectionPhase.Busy -> "Searching for Kraken — tap to cancel"
+        ConnectionPhase.Ready -> "Press the Shutter button (red)\non the Kraken to open Camera"
+    }
+}
+
 @Composable
-private fun HeroSection(
-    status: String,
-    statusColor: Color,
-    message: String,
-    isConnected: Boolean,
-    isConnecting: Boolean,
-    onConnect: () -> Unit,
-    onDisconnect: () -> Unit,
-    onOpenCamera: () -> Unit
+private fun HeroCircle(
+    phase: ConnectionPhase,
+    onTap: () -> Unit
 ) {
-    // Status and CTA share one column with tight spacing so the eye reads
-    // them as a single unit (state → action), per Material 3 hero guidance.
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
+    val containerColor by animateColorAsState(
+        targetValue = when (phase) {
+            ConnectionPhase.Idle -> MaterialTheme.colorScheme.primary
+            ConnectionPhase.Busy -> KrakenAmber
+            ConnectionPhase.Ready -> KrakenGreen
+        },
+        animationSpec = spring(
+            dampingRatio = 0.9f,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "circleColor"
+    )
+
+    Box(
+        modifier = Modifier.size(260.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Surface(
-            modifier = Modifier.size(20.dp),
-            shape = CircleShape,
-            color = statusColor
-        ) {}
+        if (phase == ConnectionPhase.Busy) {
+            PulseRings(color = KrakenAmber)
+        }
+        if (phase == ConnectionPhase.Ready) {
+            ConnectedGlow(color = KrakenGreen)
+        }
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Text(
-            text = status.replaceFirstChar { it.uppercase() },
-            fontSize = 26.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = message,
-            fontSize = 14.sp,
-            color = OceanTextMuted,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        ActionButtons(
-            isConnected = isConnected,
-            isConnecting = isConnecting,
-            onConnect = onConnect,
-            onDisconnect = onDisconnect,
-            onOpenCamera = onOpenCamera
-        )
+        Box(
+            modifier = Modifier
+                .size(180.dp)
+                .shadow(elevation = 10.dp, shape = CircleShape)
+                .clip(CircleShape)
+                .background(containerColor)
+                .clickable(
+                    enabled = phase != ConnectionPhase.Ready,
+                    onClick = onTap
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            AnimatedContent(
+                targetState = phase,
+                transitionSpec = {
+                    (fadeIn(tween(260, delayMillis = 100)) +
+                        scaleIn(
+                            initialScale = 0.55f,
+                            animationSpec = spring(
+                                dampingRatio = 0.5f,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        )) togetherWith
+                        (fadeOut(tween(120)) +
+                            scaleOut(targetScale = 0.85f, animationSpec = tween(120)))
+                },
+                label = "circleContent"
+            ) { p ->
+                when (p) {
+                    ConnectionPhase.Idle -> Icon(
+                        imageVector = BluetoothIcon,
+                        contentDescription = "Connect",
+                        tint = Color.White,
+                        modifier = Modifier.size(80.dp)
+                    )
+                    ConnectionPhase.Busy -> Icon(
+                        imageVector = BluetoothIcon,
+                        contentDescription = null,
+                        tint = Color.Black.copy(alpha = 0.85f),
+                        modifier = Modifier.size(80.dp)
+                    )
+                    ConnectionPhase.Ready -> Icon(
+                        imageVector = CheckIcon,
+                        contentDescription = "Connected",
+                        tint = Color.White,
+                        modifier = Modifier.size(96.dp)
+                    )
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun ActionButtons(
-    isConnected: Boolean,
-    isConnecting: Boolean,
-    onConnect: () -> Unit,
-    onDisconnect: () -> Unit,
-    onOpenCamera: () -> Unit
-) {
-    if (!isConnected && !isConnecting) {
-        Button(
-            onClick = onConnect,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Text("Connect to Kraken", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        }
-    } else if (isConnecting) {
-        Button(
-            onClick = onDisconnect,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC107))
-        ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                color = Color.Black,
-                strokeWidth = 2.dp
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Text("Cancel", fontSize = 18.sp, color = Color.Black)
-        }
-    } else {
-        Button(
-            onClick = onOpenCamera,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Text("Open Camera", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        }
+private fun ConnectedGlow(color: Color) {
+    val transition = rememberInfiniteTransition(label = "glow")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowProgress"
+    )
 
-        Spacer(modifier = Modifier.height(12.dp))
+    val baseSize = 180.dp
+    // Inner halo: tight to the circle, brighter, breathes a small distance.
+    val innerSize: Dp = baseSize + 8.dp + (12.dp * progress)
+    val innerAlpha = (0.55f - 0.35f * progress).coerceIn(0f, 1f)
+    Box(
+        modifier = Modifier
+            .size(innerSize)
+            .alpha(innerAlpha)
+            .border(width = 2.dp, color = color, shape = CircleShape)
+    )
 
-        OutlinedButton(
-            onClick = onDisconnect,
+    // Outer halo: wider radius, softer, breathes further.
+    val outerSize: Dp = baseSize + 22.dp + (30.dp * progress)
+    val outerAlpha = (0.30f - 0.25f * progress).coerceIn(0f, 1f)
+    Box(
+        modifier = Modifier
+            .size(outerSize)
+            .alpha(outerAlpha)
+            .border(width = 1.dp, color = color, shape = CircleShape)
+    )
+}
+
+@Composable
+private fun PulseRings(color: Color) {
+    val transition = rememberInfiniteTransition(label = "pulse")
+    val ringDuration = 2200
+    val staggerOffsets = listOf(0, 730, 1460)
+    val baseSize = 180.dp
+    val maxExtra = 70.dp
+
+    staggerOffsets.forEach { offset ->
+        val progress by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = ringDuration, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+                initialStartOffset = StartOffset(offsetMillis = offset)
+            ),
+            label = "ring$offset"
+        )
+        val size: Dp = baseSize + (maxExtra * progress)
+        val alpha = ((1f - progress) * 0.55f).coerceIn(0f, 1f)
+
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Text("Disconnect", fontSize = 15.sp, color = Color(0xFFFF8A80))
-        }
+                .size(size)
+                .alpha(alpha)
+                .border(width = 2.dp, color = color, shape = CircleShape)
+        )
     }
 }
 
-// Inline list icon — avoids pulling in material-icons-extended (4+ MB)
+// Inline Bluetooth icon — keeps us off material-icons-extended (4+ MB).
+private val BluetoothIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f
+    ).apply {
+        path(fill = SolidColor(Color.White)) {
+            // Outer Bluetooth silhouette
+            moveTo(17.71f, 7.71f)
+            lineTo(12f, 2f)
+            lineTo(11f, 2f)
+            lineTo(11f, 9.59f)
+            lineTo(6.41f, 5f)
+            lineTo(5f, 6.41f)
+            lineTo(10.59f, 12f)
+            lineTo(5f, 17.59f)
+            lineTo(6.41f, 19f)
+            lineTo(11f, 14.41f)
+            lineTo(11f, 22f)
+            lineTo(12f, 22f)
+            lineTo(17.71f, 16.29f)
+            lineTo(13.41f, 12f)
+            close()
+            // Upper triangle fill
+            moveTo(13f, 5.83f)
+            lineTo(15.17f, 8f)
+            lineTo(13f, 10.17f)
+            close()
+            // Lower triangle fill
+            moveTo(13f, 13.83f)
+            lineTo(15.17f, 16f)
+            lineTo(13f, 18.17f)
+            close()
+        }
+    }.build()
+}
+
+// Inline bluetooth_disabled icon (Material Symbols).
+// Keeps us off material-icons-extended (4+ MB).
+private val BluetoothDisabledIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f
+    ).apply {
+        path(fill = SolidColor(Color.White)) {
+            // Top-right partial bluetooth glyph
+            moveTo(13f, 5.83f)
+            lineToRelative(1.88f, 1.88f)
+            lineToRelative(-1.06f, 1.06f)
+            lineToRelative(1.41f, 1.41f)
+            lineTo(19.71f, 7.7f)
+            lineTo(14f, 2f)
+            horizontalLineToRelative(-1f)
+            verticalLineToRelative(4.17f)
+            lineToRelative(1f, 1f)
+            verticalLineTo(5.83f)
+            close()
+            // Body + diagonal slash + lower-left segments
+            moveTo(5.41f, 4f)
+            lineTo(4f, 5.41f)
+            lineTo(10.59f, 12f)
+            lineTo(5f, 17.59f)
+            lineTo(6.41f, 19f)
+            lineTo(11f, 14.41f)
+            verticalLineTo(22f)
+            horizontalLineToRelative(1f)
+            lineToRelative(4.29f, -4.29f)
+            lineToRelative(2.3f, 2.3f)
+            lineToRelative(1.41f, -1.41f)
+            lineTo(5.41f, 4f)
+            close()
+            // Lower triangle remnant
+            moveTo(13f, 18.17f)
+            verticalLineToRelative(-3.76f)
+            lineToRelative(1.88f, 1.88f)
+            lineTo(13f, 18.17f)
+            close()
+        }
+    }.build()
+}
+
+// Inline check icon — keeps us off material-icons-extended (4+ MB).
+private val CheckIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f
+    ).apply {
+        path(fill = SolidColor(Color.White)) {
+            moveTo(9f, 16.17f)
+            lineTo(4.83f, 12f)
+            lineTo(3.41f, 13.41f)
+            lineTo(9f, 19f)
+            lineTo(21f, 7f)
+            lineTo(19.59f, 5.59f)
+            close()
+        }
+    }.build()
+}
+
+// Inline list icon — keeps us off material-icons-extended (4+ MB).
 private val ListIcon: ImageVector by lazy {
     ImageVector.Builder(
         defaultWidth = 24.dp, defaultHeight = 24.dp,
         viewportWidth = 24f, viewportHeight = 24f
     ).apply {
-        path(fill = androidx.compose.ui.graphics.SolidColor(androidx.compose.ui.graphics.Color.Black)) {
-            // Three horizontal lines with bullet points (Material "List" icon)
+        path(fill = SolidColor(Color.Black)) {
             moveTo(3f, 13f); lineTo(3f, 11f); lineTo(5f, 11f); lineTo(5f, 13f); close()
             moveTo(3f, 17f); lineTo(3f, 15f); lineTo(5f, 15f); lineTo(5f, 17f); close()
             moveTo(3f, 9f); lineTo(3f, 7f); lineTo(5f, 7f); lineTo(5f, 9f); close()
