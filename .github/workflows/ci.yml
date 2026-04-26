@@ -1,8 +1,12 @@
 name: CI
 
+# Triggers on every branch push and on PRs targeting main. Tag pushes go to
+# release.yml (which produces the canonical Play Store build); this CI workflow
+# produces a release-capable signed APK + AAB on every commit so any green
+# build can be promoted to the Play Store without an extra rebuild.
 on:
   push:
-    branches: ["main", "feature/**"]
+    branches: ["**"]
   pull_request:
     branches: ["main"]
 
@@ -10,9 +14,14 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # ── Job 1: Build the debug APK ─────────────────────────────────────────────
+  # ── Job 1: Build signed release APK + AAB ─────────────────────────────────
+  # Produces the same artifact shape as release.yml but with a non-shipping
+  # version name (ci-<shortsha>) so it can never be confused with a tagged
+  # release. VERSION_CODE uses github.run_number — monotonically increasing
+  # across both ci.yml and release.yml so a CI build is always installable
+  # over a previous release on a test device.
   build:
-    name: Build debug APK
+    name: Build signed release APK + AAB
     runs-on: ubuntu-latest
 
     steps:
@@ -28,15 +37,46 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6.1.0
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
 
-      - name: Upload debug APK
+      - name: Set version
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "VERSION_NAME=ci-$SHORT_SHA" >> $GITHUB_ENV
+          echo "VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/release.jks"
+
+      - name: Build signed release APK + AAB
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          VERSION_NAME: ${{ env.VERSION_NAME }}
+          VERSION_CODE: ${{ env.VERSION_CODE }}
+
+      - name: Clean up keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: Upload release APK
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: kraken-bridge-debug-${{ github.sha }}
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 7
+          name: kraken-bridge-${{ env.VERSION_NAME }}-apk
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 14
+
+      - name: Upload release AAB
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: kraken-bridge-${{ env.VERSION_NAME }}-playstore-aab
+          path: app/build/outputs/bundle/release/*.aab
+          retention-days: 14
 
   # ── Job 2: Unit tests (JVM, no emulator needed) ────────────────────────────
   unit-tests:
@@ -74,10 +114,9 @@ jobs:
   # @device-only scenarios require a real device with Google Camera + Google
   # Photos installed and are excluded here.
   #
-  # The emulator uses the google_apis target so Google Play Services (needed for
-  # some intent resolutions) are available. Google Camera and the stock Google
-  # Photos are NOT pre-installed on emulator images; scenarios that rely on
-  # those apps are guarded by the @device-only tag.
+  # Uses a debug build because R8 minification (enabled in release) would
+  # break instrumentation test discovery and accessibility-tree assertions.
+  # The release artifact correctness is covered by Job 1 (assembleRelease).
   bdd-tests:
     name: BDD instrumented tests
     runs-on: ubuntu-latest
