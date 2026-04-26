@@ -29,7 +29,7 @@ import ch.fbc.krakenbridge.ui.PermissionScreen
 class MainActivity : ComponentActivity() {
 
     private var connectionStatus by mutableStateOf("disconnected")
-    private var statusMessage by mutableStateOf("Not connected")
+    private var statusMessage by mutableStateOf("")
     private var accessibilityEnabled by mutableStateOf(false)
     private var showHelpDialog by mutableStateOf(false)
     private var allPermissionsGranted by mutableStateOf(false)

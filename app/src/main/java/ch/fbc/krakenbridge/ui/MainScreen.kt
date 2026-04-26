@@ -71,7 +71,7 @@ fun MainScreen(
         // front-facing camera punch-hole.
         Text(
             text = "Kraken Dive Photo",
-            fontSize = 20.sp,
+            fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier
@@ -121,10 +121,13 @@ fun MainScreen(
         }
 
         // Bottom — secondary action (when relevant) + help link.
+        // navigationBarsPadding lifts the help link clear of the gesture
+        // bar; +16dp gives it visual breathing room above that.
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -162,13 +165,14 @@ fun MainScreen(
                 Icon(
                     imageVector = ListIcon,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(28.dp),
                     tint = OceanTextMuted
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = "Button Mapping",
-                    fontSize = 14.sp,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Medium,
                     color = OceanTextMuted
                 )
             }
@@ -420,7 +424,8 @@ private val BluetoothDisabledIcon: ImageVector by lazy {
 }
 
 // Inline check icon — keeps us off material-icons-extended (4+ MB).
-private val CheckIcon: ImageVector by lazy {
+// Internal so PermissionScreen can reuse for its Allow CTA.
+internal val CheckIcon: ImageVector by lazy {
     ImageVector.Builder(
         defaultWidth = 24.dp, defaultHeight = 24.dp,
         viewportWidth = 24f, viewportHeight = 24f
