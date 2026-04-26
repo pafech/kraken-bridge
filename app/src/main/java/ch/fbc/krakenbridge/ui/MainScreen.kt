@@ -1,6 +1,7 @@
 package ch.fbc.krakenbridge.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
@@ -26,7 +27,6 @@ fun MainScreen(
     onShowHelp: () -> Unit,
     onDismissHelp: () -> Unit
 ) {
-    // Show help dialog when requested
     if (showHelpDialog) {
         HelpDialog(onDismiss = onDismissHelp)
     }
@@ -43,61 +43,113 @@ fun MainScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-    WaveBackground()
+        WaveBackground()
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Compact header — title shrinks so it doesn't compete with the
+            // hero (status + primary CTA) for attention.
+            Text(
+                text = "Kraken Dive Photo",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "v${BuildConfig.VERSION_NAME}",
+                fontSize = 11.sp,
+                color = OceanTextMuted.copy(alpha = 0.85f)
+            )
+
+            // Push hero block toward the optical centre (~40% from top).
+            Spacer(modifier = Modifier.weight(1f))
+
+            HeroSection(
+                status = status,
+                statusColor = statusColor,
+                message = message,
+                isConnected = isConnected,
+                isConnecting = isConnecting,
+                onConnect = onConnect,
+                onDisconnect = onDisconnect,
+                onOpenCamera = onOpenCamera
+            )
+
+            Spacer(modifier = Modifier.weight(1.2f))
+
+            // Secondary action — visually quiet so it never competes with
+            // the primary connect/disconnect CTA.
+            TextButton(
+                onClick = onShowHelp,
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                Icon(
+                    imageVector = ListIcon,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = OceanTextMuted
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Button Mapping",
+                    fontSize = 14.sp,
+                    color = OceanTextMuted
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun HeroSection(
+    status: String,
+    statusColor: Color,
+    message: String,
+    isConnected: Boolean,
+    isConnecting: Boolean,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+    onOpenCamera: () -> Unit
+) {
+    // Status and CTA share one column with tight spacing so the eye reads
+    // them as a single unit (state → action), per Material 3 hero guidance.
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // Title
-        Text(
-            text = "Kraken Dive Photo",
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
+        Surface(
+            modifier = Modifier.size(20.dp),
+            shape = CircleShape,
+            color = statusColor
+        ) {}
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         Text(
-            text = "Kraken Underwater Housing Control",
-            fontSize = 16.sp,
-            color = OceanTextMuted
+            text = status.replaceFirstChar { it.uppercase() },
+            fontSize = 26.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
         )
 
+        Spacer(modifier = Modifier.height(4.dp))
+
         Text(
-            text = "v${BuildConfig.VERSION_NAME}",
-            fontSize = 12.sp,
-            color = OceanTextMuted.copy(alpha = 0.85f)
+            text = message,
+            fontSize = 14.sp,
+            color = OceanTextMuted,
+            textAlign = TextAlign.Center
         )
-        
+
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Status indicator
-        StatusCard(status, statusColor, message)
-        
-        Spacer(modifier = Modifier.weight(1f))
-        
-        // Help button
-        OutlinedButton(
-            onClick = onShowHelp,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Icon(
-                imageVector = ListIcon,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Button Mapping", fontSize = 16.sp)
-        }
-        
-        Spacer(modifier = Modifier.weight(1f))
-        
-        // Action buttons
         ActionButtons(
             isConnected = isConnected,
             isConnecting = isConnecting,
@@ -105,51 +157,6 @@ fun MainScreen(
             onDisconnect = onDisconnect,
             onOpenCamera = onOpenCamera
         )
-        
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-    }
-}
-
-@Composable
-private fun StatusCard(
-    status: String,
-    statusColor: Color,
-    message: String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Status dot
-            Surface(
-                modifier = Modifier.size(24.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = statusColor
-            ) {}
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Text(
-                text = status.replaceFirstChar { it.uppercase() },
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium
-            )
-            
-            Text(
-                text = message,
-                fontSize = 14.sp,
-                color = OceanTextMuted,
-                textAlign = TextAlign.Center
-            )
-        }
     }
 }
 
@@ -169,7 +176,7 @@ private fun ActionButtons(
                 .height(56.dp),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Text("Connect to Kraken", fontSize = 18.sp)
+            Text("Connect to Kraken", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         }
     } else if (isConnecting) {
         Button(
@@ -189,30 +196,26 @@ private fun ActionButtons(
             Text("Cancel", fontSize = 18.sp, color = Color.Black)
         }
     } else {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Button(
+            onClick = onOpenCamera,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Button(
-                onClick = onOpenCamera,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Open Camera", fontSize = 16.sp)
-            }
-            
-            Button(
-                onClick = onDisconnect,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(56.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))
-            ) {
-                Text("Disconnect", fontSize = 16.sp)
-            }
+            Text("Open Camera", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedButton(
+            onClick = onDisconnect,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("Disconnect", fontSize = 15.sp, color = Color(0xFFFF8A80))
         }
     }
 }
