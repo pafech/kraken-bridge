@@ -79,40 +79,27 @@ android {
 }
 
 dependencies {
-    // Core
+    // Core: ContextCompat, toUri, SharedPreferences.edit (used app-wide)
     implementation("androidx.core:core-ktx:1.18.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
+    // ComponentActivity + setContent for the Compose host
     implementation("androidx.activity:activity-compose:1.13.0")
 
-    // Compose
+    // Compose UI — versions resolved by the BOM
     implementation(platform("androidx.compose:compose-bom:2026.03.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
 
-    // Debug
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
-
-    // ── Unit tests ───────────────────────────────────────────────────────────
-    testImplementation("junit:junit:4.13.2")
-
     // ── Instrumented / BDD tests ─────────────────────────────────────────────
-    // Cucumber-Android: Gherkin BDD runner for instrumented tests.
-    // Features live in src/androidTest/assets/features/
-    // Step definitions are auto-discovered in the test APK via annotation scanning.
+    // Cucumber-Android: Gherkin BDD runner. Features live in
+    // src/androidTest/assets/features/; step definitions are auto-discovered
+    // in the test APK via annotation scanning. Cucumber pulls junit transitively.
     androidTestImplementation("io.cucumber:cucumber-android:7.14.0")
 
-    // UIAutomator – cross-app interaction (Google Camera, Google Photos)
-    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
-
-    // AndroidX test infrastructure
+    // InstrumentationRegistry — used by step definitions to obtain the target
+    // context and uiAutomation handle.
     androidTestImplementation("androidx.test:runner:1.6.2")
-    androidTestImplementation("androidx.test:rules:1.6.1")
-    androidTestImplementation("androidx.test:core:1.6.1")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 
-    // Espresso – in-app UI assertions for the Kraken Bridge activity itself
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    // UIAutomator — cross-app interaction (Google Camera, Google Photos).
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
 }
