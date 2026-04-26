@@ -52,6 +52,9 @@ android {
             // .so in the AAB comes from androidx.graphics:graphics-path (transitive
             // Compose dep) and ships stripped, so AGP cannot extract symbols.
             // Play Console's "native debug symbols" warning is inherent here.
+            // Confirmed best practice: accept the warning. AGP docs explicitly
+            // call out the pre-stripped-vendor-AAR case — it cannot be fixed at
+            // the consumer side. See https://developer.android.com/build/include-native-symbols
             // Only attach signing config when the env vars are present (i.e. in CI)
             if (!System.getenv("KEYSTORE_PATH").isNullOrBlank()) {
                 signingConfig = signingConfigs.getByName("release")
