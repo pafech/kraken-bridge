@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- BLE Permissions -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
+    <!-- usesPermissionFlags applies on API 31+; on 26-30 the flag is ignored
+         (BLE scan implicitly required ACCESS_FINE_LOCATION there anyway). -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="31"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
@@ -55,6 +60,7 @@
             android:showOnLockScreen="true"
             android:turnScreenOn="true"
             android:taskAffinity=""
+            tools:targetApi="27"
             android:theme="@style/Theme.KrakenBridge.Wake"/>
 
         <service
