@@ -1,7 +1,10 @@
 package ch.fbc.krakenbridge.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,83 +26,86 @@ fun PermissionScreen(
     groups: List<PermissionGroupState>,
     batteryOptimizationExempt: Boolean,
     accessibilityEnabled: Boolean,
-    onGrantGroup: (String) -> Unit,
-    onGrantBattery: () -> Unit,
-    onEnableAccessibility: () -> Unit,
     onContinue: () -> Unit
 ) {
-    val allGranted = groups.all { it.isGranted } && batteryOptimizationExempt && accessibilityEnabled
-
-    Box(modifier = Modifier.fillMaxSize()) {
-    WaveBackground()
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Spacer(modifier = Modifier.height(48.dp))
-
-        Text(
-            text = "Kraken Dive Photo",
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Grant these permissions before your dive — you won't be able to do it underwater.",
-            fontSize = 14.sp,
-            color = OceanTextMuted,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        groups.forEach { group ->
-            PermissionRow(
-                name = group.name,
-                reason = group.reason,
-                isGranted = group.isGranted,
-                onGrant = { onGrantGroup(group.name) }
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        PermissionRow(
+    val rows = groups + listOf(
+        PermissionGroupState(
             name = "Battery",
             reason = "Keep the BLE connection alive during your dive",
-            isGranted = batteryOptimizationExempt,
-            onGrant = onGrantBattery
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        PermissionRow(
+            isGranted = batteryOptimizationExempt
+        ),
+        PermissionGroupState(
             name = "Accessibility",
             reason = "Control camera apps via housing buttons",
-            isGranted = accessibilityEnabled,
-            onGrant = onEnableAccessibility
+            isGranted = accessibilityEnabled
         )
+    )
 
-        Spacer(modifier = Modifier.weight(1f))
-
-        Button(
-            onClick = onContinue,
-            enabled = allGranted,
+    Box(modifier = Modifier.fillMaxSize()) {
+        WaveBackground()
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(12.dp)
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Continue", fontSize = 18.sp)
-        }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(40.dp))
 
-        Spacer(modifier = Modifier.height(16.dp))
-    }
+                Text(
+                    text = "App Permissions",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "Kraken Dive Photo needs access to a few system features to work properly underwater.",
+                    fontSize = 14.sp,
+                    color = OceanTextMuted,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                rows.forEachIndexed { index, row ->
+                    PermissionRow(
+                        name = row.name,
+                        reason = row.reason,
+                        isGranted = row.isGranted
+                    )
+                    if (index < rows.lastIndex) {
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            Button(
+                onClick = onContinue,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = "Continue",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+        }
     }
 }
 
@@ -107,53 +113,56 @@ fun PermissionScreen(
 private fun PermissionRow(
     name: String,
     reason: String,
-    isGranted: Boolean,
-    onGrant: () -> Unit
+    isGranted: Boolean
 ) {
-    Card(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isGranted)
-                Color(0xFF1B5E20).copy(alpha = 0.3f)
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            modifier = Modifier.size(36.dp),
+            shape = CircleShape,
+            color = if (isGranted)
+                Color(0xFF4CAF50).copy(alpha = 0.20f)
             else
                 MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = name,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = reason,
-                    fontSize = 12.sp,
-                    color = OceanTextMuted
-                )
-            }
-
-            if (isGranted) {
-                Text(
-                    text = "✓",
-                    fontSize = 20.sp,
-                    color = Color(0xFF4CAF50),
-                    fontWeight = FontWeight.Bold
-                )
-            } else {
-                OutlinedButton(
-                    onClick = onGrant,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Grant")
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isGranted) {
+                    Text(
+                        text = "✓",
+                        fontSize = 18.sp,
+                        color = Color(0xFF4CAF50),
+                        fontWeight = FontWeight.Bold
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier.size(8.dp),
+                        shape = CircleShape,
+                        color = OceanTextMuted.copy(alpha = 0.6f)
+                    ) {}
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = name,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = reason,
+                fontSize = 13.sp,
+                color = OceanTextMuted,
+                lineHeight = 18.sp
+            )
         }
     }
 }
