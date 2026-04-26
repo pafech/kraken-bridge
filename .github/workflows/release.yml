@@ -37,10 +37,15 @@ jobs:
 
       # ------------------------------------------------------------------ #
       # Derive VERSION_NAME and VERSION_CODE from the triggering ref.        #
-      #   Tag push (v1.2.3)  →  VERSION_NAME=1.2.3  VERSION_CODE=<run#>     #
+      #   Tag push (v1.2.3)  →  VERSION_NAME=1.2.3                          #
       #   workflow_dispatch   →  VERSION_NAME=manual-YYYYMMDD               #
-      # github.run_number is a monotonically increasing integer that starts  #
-      # at 1 and never resets — safe to use as Android versionCode.         #
+      #                                                                      #
+      # VERSION_CODE = github.run_number + 100                               #
+      # github.run_number is per-workflow (release.yml has its own counter   #
+      # independent from ci.yml). The +100 offset keeps tagged releases      #
+      # comfortably above any historical Play Store versionCode (production  #
+      # has been seen at 57 from earlier CI uploads). Future releases stay   #
+      # monotonic via the workflow counter.                                  #
       # ------------------------------------------------------------------ #
       - name: Set version
         run: |
@@ -50,7 +55,7 @@ jobs:
           else
             echo "VERSION_NAME=manual-$(date +%Y%m%d)" >> $GITHUB_ENV
           fi
-          echo "VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
+          echo "VERSION_CODE=$(( ${{ github.run_number }} + 100 ))" >> $GITHUB_ENV
 
       # ------------------------------------------------------------------ #
       # Signing — requires four repository secrets:                          #
