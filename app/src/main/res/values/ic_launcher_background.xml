@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- OceanDeep from Theme.kt — matches the in-app palette so the launcher
+         icon visually belongs to the same brand as the app's UI. -->
+    <color name="ic_launcher_background">#061A2A</color>
+</resources>
