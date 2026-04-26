@@ -85,7 +85,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.13.0")
 
     // Compose UI — versions resolved by the BOM
-    implementation(platform("androidx.compose:compose-bom:2026.03.01"))
+    implementation(platform("androidx.compose:compose-bom:2026.04.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
@@ -94,11 +94,11 @@ dependencies {
     // Cucumber-Android: Gherkin BDD runner. Features live in
     // src/androidTest/assets/features/; step definitions are auto-discovered
     // in the test APK via annotation scanning. Cucumber pulls junit transitively.
-    androidTestImplementation("io.cucumber:cucumber-android:7.14.0")
+    androidTestImplementation("io.cucumber:cucumber-android:7.18.1")
 
     // InstrumentationRegistry — used by step definitions to obtain the target
     // context and uiAutomation handle.
-    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:runner:1.7.0")
 
     // UIAutomator — cross-app interaction (Google Camera, Google Photos).
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
