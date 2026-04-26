@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -212,6 +213,26 @@ private fun HeroCircle(
         label = "circleColor"
     )
 
+    // Idle breath — slow scale modulation invites the user to tap.
+    // Always declared so the transition is stable across phase changes;
+    // the scale value collapses to 1f outside Idle so the breath only
+    // shows on the disconnected screen.
+    val breathTransition = rememberInfiniteTransition(label = "idleBreath")
+    val breathProgress by breathTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breathProgress"
+    )
+    val circleScale = if (phase == ConnectionPhase.Idle) {
+        0.96f + 0.08f * breathProgress  // 0.96 → 1.04
+    } else {
+        1f
+    }
+
     Box(
         modifier = Modifier.size(260.dp),
         contentAlignment = Alignment.Center
@@ -226,6 +247,7 @@ private fun HeroCircle(
         Box(
             modifier = Modifier
                 .size(180.dp)
+                .scale(circleScale)
                 .shadow(elevation = 10.dp, shape = CircleShape)
                 .clip(CircleShape)
                 .background(containerColor)
