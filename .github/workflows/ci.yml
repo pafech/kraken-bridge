@@ -17,9 +17,10 @@ jobs:
   # ── Job 1: Build signed release APK + AAB ─────────────────────────────────
   # Produces the same artifact shape as release.yml but with a non-shipping
   # version name (ci-<shortsha>) so it can never be confused with a tagged
-  # release. VERSION_CODE uses github.run_number — monotonically increasing
-  # across both ci.yml and release.yml so a CI build is always installable
-  # over a previous release on a test device.
+  # release. VERSION_CODE uses ci.yml's github.run_number directly — this
+  # counter is per-workflow, NOT shared with release.yml. release.yml adds
+  # a +100 offset to keep tagged releases above the CI range (CI artifacts
+  # are for sideload/QA, releases ship to Play Store).
   build:
     name: Build signed release APK + AAB
     runs-on: ubuntu-latest
