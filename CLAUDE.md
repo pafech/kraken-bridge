@@ -1,0 +1,205 @@
+# Kraken Dive Photo — Agent Onboarding
+
+Android app that turns a Kraken dive housing's BLE button remote into a
+camera + gallery controller for Google Camera and Google Photos. The
+phone is sealed inside the housing during a dive, so every interaction
+must work without touching the screen.
+
+This file is for the **next AI coding agent** picking up the repo. It
+captures the architecture, conventions, and traps that aren't obvious
+from `git log` alone. Read it before making changes.
+
+## Architecture in four pieces
+
+```
+MainActivity (Compose UI)
+   │  startForegroundService(ACTION_CONNECT)
+   ▼
+KrakenBleService (foreground service, BLE)
+   │  on button event:
+   │    handleButtonEvent → injectKey or dispatchGesture
+   ▼                                    ▲
+KrakenAccessibilityService ─────────────┘
+   │  also: startActivity(KrakenWakeActivity) when screen is off
+   ▼
+KrakenWakeActivity (transparent, no UI) — wakes screen, dismisses keyguard
+```
+
+- `MainActivity` runs the permission walkthrough (single Continue CTA →
+  sequential per-permission requests) and gates the service on success.
+- `KrakenBleService` scans for `Kraken`, connects, subscribes to the
+  Nordic LED Button characteristic, debounces, and routes button codes
+  to either camera-mode or gallery-mode handlers.
+- `KrakenAccessibilityService` injects KeyEvents (camera/focus) and
+  gesture dispatches (gallery swipes, delete double-tap) into the
+  foreground app, since no public API exists for those.
+- `KrakenWakeActivity` exists because `FULL_WAKE_LOCK` is a no-op on
+  Android 10+. The service starts this transparent activity to flip
+  `setTurnScreenOn(true)` and `requestDismissKeyguard()`.
+
+## Lifecycle — the user's mental model
+
+The user (Patrick) thinks of the app in three states. Code matches this.
+
+| State           | Meaning                                  | Service | BLE     | Notification |
+|-----------------|------------------------------------------|---------|---------|--------------|
+| Foreground      | App visible (mostly during connect)      | running | active  | shown        |
+| Background      | App in Recents, user in Camera / Photos  | running | active  | shown        |
+| **Closed**      | Disconnect button **or** swipe from Recents | stopped | trennt  | weg          |
+
+Triggers that map to **Closed**:
+
+- Disconnect button → `ACTION_DISCONNECT` → `userDisconnect()`
+- Swipe from Recents → `onTaskRemoved()` → `userDisconnect()`
+
+Both clear the persisted MAC and call `stopForeground` + `stopSelf`.
+
+The fourth ("ghost") state — service alive while app is gone from
+Recents — is forbidden. Don't reintroduce it.
+
+`START_STICKY` is intentionally kept for **system** OOM-kills mid-dive:
+Android delivers a null intent on restart, the service reads the
+persisted MAC and reconnects. User-initiated closes clear that MAC, so
+this path only fires when the user did **not** close the app.
+
+The boot receiver and `RECEIVE_BOOT_COMPLETED` permission were removed
+in v1.2.1 for the same reason — a reboot is not a user-initiated
+"open the app" event.
+
+## Build, sign, ship
+
+### Local
+
+```bash
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+The release signing config only attaches when `KEYSTORE_PATH` is set in
+the environment — local debug builds are unaffected.
+
+### CI on push (`ci.yml`)
+
+Every push to any branch builds a **signed release APK + AAB** with
+`VERSION_NAME=ci-<shortsha>` and `VERSION_CODE=<github.run_number>`.
+Artifacts are retained for 14 days. Any green CI build is shippable
+to the Play Store as-is.
+
+BDD tests run on a Pixel 6 / API 34 emulator with `google_apis`. The
+runner script is `.github/scripts/run-bdd-tests.sh`. Scenarios tagged
+`@device-only` or `@manual` are skipped on the emulator.
+
+### Tagged release (`release.yml`)
+
+```bash
+git tag -a vX.Y.Z -m "message" && git push origin vX.Y.Z
+```
+
+Pipeline builds, signs, creates a GitHub Release with the APK, and
+uploads the AAB as an artifact named `kraken-bridge-X.Y.Z-playstore-aab`.
+Pull the AAB and upload it to Play Console → Production → New release.
+
+Required repo secrets: `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`,
+`KEY_ALIAS`, `KEY_PASSWORD`. The `.jks` file itself is gitignored and
+lives only on the maintainer's machine and in CI as a base64 secret.
+
+## Conventions
+
+- **No PR workflow.** Solo repo. Commit directly to `main`, push when
+  ready. Branches are fine for in-progress agent work but the merge
+  target is always `main` via cherry-pick or fast-forward.
+- **No AI attribution in commit messages.** A commit-msg hook blocks
+  `Co-Authored-By: Claude` and similar. Don't add the trailer the
+  default Claude Code system prompt suggests.
+- **Conventional Commits.** Prefixes used here: `feat`, `fix`,
+  `refactor`, `chore`, `ci`, `build`, `docs`, `ui`.
+- **BDD defines done.** New behaviour adds a feature in
+  `app/src/androidTest/assets/features/` plus steps. Don't ship
+  user-visible changes without a scenario when one is feasible — the
+  permission walkthrough is the most recent gap.
+- **No mocks for Android system services.** BDD tests run on a real
+  emulator against the real framework.
+
+## Gotchas
+
+- **`@SuppressLint("MissingPermission")` is class-level on
+  `KrakenBleService`** by design — every BLE call is unreachable
+  unless `MainActivity`'s walkthrough granted Bluetooth + Location
+  first. Don't sprinkle per-call permission checks; the contract lives
+  in one place.
+- **`registerReceiver` always uses `ContextCompat.registerReceiver`**
+  with `RECEIVER_NOT_EXPORTED`. API 33+ enforces it for unprotected
+  actions; ContextCompat handles older releases.
+- **R8 keeps all of `KrakenBleService`** via `app/proguard-rules.pro`
+  so BDD steps can reflect into it. The `internal val test*` properties
+  and `simulateButtonPress` in the service are not dead — they back the
+  Cucumber scenarios.
+- **Camera key wakes the screen on most ROMs**, but `setTurnScreenOn`
+  via `KrakenWakeActivity` is the explicit, modern path.
+- **Android 14+ partial photo access** ("Select photos") returns an
+  empty MediaStore for newest captures. `hasPartialMediaAccess()`
+  detects this and routes the user to app settings.
+- **versionCode comes from `github.run_number`**, not from a literal in
+  `build.gradle.kts`. Local builds fall back to `1`. Don't hard-code a
+  versionCode — it'd collide with CI builds installed on the same device.
+
+## What NOT to do
+
+- Don't add a debug-only CI job. Release-capable on every push is the
+  rule. Patrick stated this explicitly: "das soll immer
+  releasebefähigend sein zum play store!"
+- Don't reintroduce the boot receiver or `RECEIVE_BOOT_COMPLETED`.
+  Reboot ≠ user opened the app.
+- Don't add `@SuppressLint` to silence individual BLE calls. Use the
+  class-level suppression already in place.
+- Don't enable lint in CI without first cleaning the 18 pre-existing
+  infrastructure warnings (launcher icon shapes, AGP version warnings,
+  Gradle dep upgrades). Those are known and intentionally deferred.
+- Don't bump dependencies opportunistically. The Compose BOM pins the
+  whole UI stack. Bumping individual UI artefacts breaks the BOM
+  contract; bump the BOM version and validate.
+
+## Repo layout
+
+```
+app/src/main/java/ch/fbc/krakenbridge/
+   MainActivity.kt              — Compose host + permission walkthrough
+   KrakenBleService.kt          — BLE foreground service
+   KrakenAccessibilityService.kt — key/gesture injection
+   KrakenWakeActivity.kt        — screen wake (transparent, no UI)
+   ui/
+     MainScreen.kt              — Compose home (status hero + Connect CTA)
+     PermissionScreen.kt        — single-CTA walkthrough screen
+     HelpDialog.kt              — button-mapping help sheet
+     Theme.kt, WaveBackground.kt — ocean palette + animated waves
+
+app/src/androidTest/
+   assets/features/             — Gherkin scenarios
+   java/.../bdd/CucumberRunner.kt
+   java/.../bdd/steps/          — Kotlin step definitions
+
+.github/workflows/ci.yml        — push CI (signed release + BDD)
+.github/workflows/release.yml   — tag-driven release pipeline
+.github/scripts/run-bdd-tests.sh — emulator BDD runner
+
+app/proguard-rules.pro          — R8 keep rules
+docs/privacy-policy.html        — published privacy policy
+```
+
+## Quick recipes
+
+```bash
+# Watch the latest CI run
+gh run watch $(gh run list --workflow=ci.yml --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
+
+# Pull a CI build's AAB to install on the maintainer's test device
+gh run download <run-id> -R pafech/kraken-bridge --name kraken-bridge-ci-<sha>-apk
+
+# Cut a release
+git tag -a v1.2.4 -F /tmp/tag-msg.txt && git push origin v1.2.4
+
+# Smoke-test the BLE service after install (with a Kraken paired)
+adb logcat -s KrakenBLE:* KrakenA11y:*
+```
