@@ -188,6 +188,96 @@ app/proguard-rules.pro          — R8 keep rules
 docs/privacy-policy.html        — published privacy policy
 ```
 
+## Known optimisation debt
+
+Captured 2026-04-26 by an honest self-review after a cleanup pass that
+fixed lifecycle, dropped unused deps, and replaced launcher icons.
+These are **real** architectural debts, not lint pedantry. Tackle in
+order of impact when the next session has a fresh head.
+
+### High impact (architecture)
+
+1. **`KrakenBleService` does too much (1003 lines, ~7 responsibilities).**
+   BLE connection + button routing + MediaStore queries + 3 wake locks
+   + notification + state machine (`isVideoMode`, `isGalleryMode`,
+   `isRecording`, `cameraIsOpen`) + SharedPreferences + reconnect
+   backoff. Decompose along SRP: `BleConnectionManager`,
+   `ButtonEventRouter`, `CameraController` / `GalleryController`,
+   `WakeLockHolder`, `KrakenPreferences`. The current class-level
+   `@SuppressLint("MissingPermission")` then naturally narrows to a
+   single `requireBlePermissions()` guard at the orchestrator boundary.
+
+2. **`internal val test*` hooks leak test concerns into production.**
+   `testIsVideoMode`, `testIsGalleryMode`, `testIsRecording`,
+   `testCameraIsOpen`, `testQueryLatestMedia`, `simulateButtonPress`
+   exist solely so BDD step definitions can introspect the service.
+   Replace with observable state (StateFlow / SharedFlow) that
+   production code also consumes — UI binds to it, tests read from it,
+   no test-only properties survive in main.
+
+3. **`KrakenAccessibilityService` ~500 lines, similar SRP issue.**
+   Service lifecycle + key injection + gesture dispatch + a11y-tree
+   dump + coordinate maths. Same decomposition argument.
+
+### Medium impact (correctness, ergonomics)
+
+4. **Reconnect backoff is hand-rolled** (`Handler.postDelayed` +
+   `reconnectAttempts` counter). With kotlinx-coroutines already on
+   the classpath transitively, a `Flow` with `retryWhen` + delay
+   strategy reads more declaratively and is unit-testable without a
+   service.
+
+5. **`KrakenWakeActivity` `finish()` after a 600 ms heuristic delay.**
+   Brittle on slow devices and wasteful on fast ones. The correct
+   trigger is "the camera activity has gained focus" — bind to its
+   `onResume` lifecycle (LifecycleObserver) or use
+   `ActivityManager.getRunningAppProcesses` polling for the camera
+   package, then finish.
+
+6. **Hardcoded `com.google.android.GoogleCamera` and
+   `com.google.android.apps.photos`.** Breaks on non-Pixel phones,
+   which is half the Android market. Make the camera + gallery
+   package configurable (preference + fallback to ACTION_IMAGE_CAPTURE
+   resolver).
+
+7. **No JVM unit tests.** Button code parsing (high/low nibble),
+   debounce window, camera/gallery mode toggle, video-recording state
+   machine — all pure logic, all testable without an emulator.
+   Reintroduce the `unit-tests` CI job once tests exist.
+
+8. **No BDD scenario for the permission walkthrough.** System
+   permission dialogs are awkward to drive on the emulator, but
+   UiAutomator can target the Settings app. Either add scenarios with
+   that approach, or document explicitly in the feature file that the
+   walkthrough is hand-tested.
+
+### Low impact (polish, defer until you're touching the area)
+
+9. **`gradle.properties` carries six deprecated AGP flags.**
+   `r8.optimizedResourceShrinking=false`,
+   `defaults.buildfeatures.resvalues=true`,
+   `r8.strictFullModeForKeepRules=false`,
+   `enableAppCompileTimeRClass=false`,
+   `usesSdkInManifest.disallowed=false`,
+   `uniquePackageNames=false`,
+   `dependency.useConstraints=true` (some are still meaningful, some
+   parrot defaults, some hold AGP back from improved behaviour).
+   Verify each individually against AGP 9 defaults and drop the
+   redundant ones; leave only what's intentionally non-default.
+
+10. **`WaveBackground` computes three layered sine waves per frame.**
+    Probably negligible, but on a 1 CPU / 1 GB device during a 4-hour
+    dive the foreground service is fighting for the battery. If
+    `dumpsys batterystats` ever flags the app, the wave background is
+    where to look first. Consider running it only when status changes
+    or pausing it when the app is not visible.
+
+11. **`@SuppressLint("BatteryLife")` is correct but the Play Console
+    declaration must match.** When updating the Play Store listing,
+    fill out the "Acceptable use" form for
+    REQUEST_IGNORE_BATTERY_OPTIMIZATIONS with the dive-companion
+    rationale, otherwise Play review may flag it on a future submission.
+
 ## Quick recipes
 
 ```bash
