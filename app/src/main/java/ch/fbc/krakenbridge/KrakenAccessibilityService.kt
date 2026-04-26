@@ -19,6 +19,7 @@ import android.view.KeyEvent
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.core.content.ContextCompat
 
 enum class FocusZone {
     NEAR,    // Bottom of viewfinder - focus on close objects
@@ -465,16 +466,17 @@ class KrakenAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         
-        // Register receiver for key injection requests
+        // Register receiver for key injection requests. Both actions are
+        // package-internal (sender uses setPackage(packageName)), so the
+        // receiver must be NOT_EXPORTED. ContextCompat handles the API 33+
+        // flag requirement and the no-op behaviour on older releases.
         val filter = IntentFilter().apply {
             addAction(ACTION_INJECT_KEY)
             addAction(ACTION_CHECK_SERVICE)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(keyReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(keyReceiver, filter)
-        }
+        ContextCompat.registerReceiver(
+            this, keyReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         
         Log.i(TAG, "Accessibility service connected and ready")
         broadcastServiceStatus()
