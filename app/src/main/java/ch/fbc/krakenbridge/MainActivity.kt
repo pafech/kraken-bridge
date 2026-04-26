@@ -91,7 +91,6 @@ class MainActivity : ComponentActivity() {
                             showHelpDialog = showHelpDialog,
                             onConnect = { startConnection() },
                             onDisconnect = { stopConnection() },
-                            onOpenCamera = { openGoogleCamera() },
                             onShowHelp = { showHelpDialog = true },
                             onDismissHelp = { showHelpDialog = false }
                         )
@@ -313,20 +312,4 @@ class MainActivity : ComponentActivity() {
         startService(intent)
     }
 
-    private fun openGoogleCamera() {
-        try {
-            val intent = Intent(Intent.ACTION_MAIN).apply {
-                setPackage("com.google.android.GoogleCamera")
-                addCategory(Intent.CATEGORY_LAUNCHER)
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            try {
-                val intent = Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)
-                startActivity(intent)
-            } catch (e2: Exception) {
-                Toast.makeText(this, "Could not open camera", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
 }

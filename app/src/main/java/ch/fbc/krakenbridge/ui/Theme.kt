@@ -16,6 +16,10 @@ val OceanText = Color(0xFFE1F5FE)
 // previous Color.Gray which was below AA on the dark surface cards.
 val OceanTextMuted = Color(0xFFB3E5FC)
 
+// Connection-phase colours used by the hero circle, pulse rings and glow.
+val KrakenAmber = Color(0xFFFFC107)
+val KrakenGreen = Color(0xFF8BC34A)
+
 @Composable
 fun KrakenBridgeTheme(content: @Composable () -> Unit) {
     MaterialTheme(
