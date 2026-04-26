@@ -76,6 +76,16 @@ android {
         compose = true
         buildConfig = true
     }
+
+    lint {
+        // ObsoleteSdkInt fires on res/mipmap-anydpi-v26/ because minSdk=26
+        // makes the -v26 qualifier technically redundant. AAPT, however,
+        // does NOT resolve adaptive icons placed in res/mipmap-anydpi/ (no
+        // version qualifier) — the build fails with "resource mipmap/ic_launcher
+        // not found". The -v26 qualifier is the documented and only working
+        // location for adaptive-icon XMLs, so the check is wrong for our case.
+        disable += "ObsoleteSdkInt"
+    }
 }
 
 dependencies {
