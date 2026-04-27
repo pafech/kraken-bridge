@@ -3,6 +3,8 @@ package ch.fbc.krakenbridge
 import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.*
 import android.content.pm.PackageManager
 import android.os.Build
@@ -75,6 +77,23 @@ class MainActivity : ComponentActivity() {
     private val systemSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { onPermissionStepFinished() }
+
+    // User accepted (or declined) the system "Turn on Bluetooth?" dialog.
+    // RESULT_OK ⇒ adapter is now enabled, start the BLE service. Anything else
+    // means the user kept Bluetooth off — we surface a hint and stay idle.
+    private val enableBluetoothLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            startBleService()
+        } else {
+            Toast.makeText(
+                this,
+                "Bluetooth is required to connect to the housing",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -327,6 +346,21 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startConnection() {
+        val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+        if (adapter == null) {
+            Toast.makeText(this, "This device has no Bluetooth", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!adapter.isEnabled) {
+            // BLUETOOTH_CONNECT (API 31+) is granted at this point because the
+            // walkthrough already gated the Connect CTA on it.
+            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            return
+        }
+        startBleService()
+    }
+
+    private fun startBleService() {
         val intent = Intent(this, KrakenBleService::class.java).apply {
             action = KrakenBleService.ACTION_CONNECT
         }

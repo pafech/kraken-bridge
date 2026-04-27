@@ -440,10 +440,24 @@ class KrakenBleService : Service() {
 
     private fun startScan() {
         if (scanning) return
-        
-        val scanner = bluetoothAdapter?.bluetoothLeScanner
+
+        // Adapter must be enabled before any scan/connect call. On Android 16 the
+        // BluetoothLeScanner is non-null while the adapter is OFF, but the system
+        // service then throws SecurityException(BLUETOOTH_PRIVILEGED) — an opaque
+        // error that crashes the foreground service. Guard explicitly.
+        val adapter = bluetoothAdapter
+        if (adapter == null || !adapter.isEnabled) {
+            broadcastStatus("error", "Turn on Bluetooth to connect")
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
+
+        val scanner = adapter.bluetoothLeScanner
         if (scanner == null) {
             broadcastStatus("error", "Bluetooth not available")
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
             return
         }
 
