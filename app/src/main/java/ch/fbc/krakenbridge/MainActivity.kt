@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
     private var showHelpDialog by mutableStateOf(false)
     private var allPermissionsGranted by mutableStateOf(false)
     private var batteryOptimizationExempt by mutableStateOf(false)
+    private var displayOverlayGranted by mutableStateOf(false)
 
     private var bluetoothGranted by mutableStateOf(false)
     private var locationGranted by mutableStateOf(false)
@@ -120,6 +121,7 @@ class MainActivity : ComponentActivity() {
                             ),
                             batteryOptimizationExempt = batteryOptimizationExempt,
                             accessibilityEnabled = accessibilityEnabled,
+                            displayOverlayGranted = displayOverlayGranted,
                             onContinue = { startPermissionWalkthrough() }
                         )
                     }
@@ -176,9 +178,11 @@ class MainActivity : ComponentActivity() {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         batteryOptimizationExempt = pm.isIgnoringBatteryOptimizations(packageName)
 
+        displayOverlayGranted = Settings.canDrawOverlays(this)
+
         allPermissionsGranted = bluetoothGranted && locationGranted &&
             mediaGranted && notificationsGranted && batteryOptimizationExempt &&
-            accessibilityEnabled
+            accessibilityEnabled && displayOverlayGranted
     }
 
     private fun isGranted(permission: String): Boolean =
@@ -216,6 +220,7 @@ class MainActivity : ComponentActivity() {
         !notificationsGranted -> "Notifications"
         !batteryOptimizationExempt -> "Battery"
         !accessibilityEnabled -> "Accessibility"
+        !displayOverlayGranted -> "Display"
         else -> null
     }
 
@@ -252,7 +257,30 @@ class MainActivity : ComponentActivity() {
             }
             "Battery" -> launchBatteryOptimization()
             "Accessibility" -> launchAccessibilitySettings()
+            "Display" -> launchOverlayPermission()
         }
+    }
+
+    /**
+     * Drop the diver into the system "Display over other apps" page so they
+     * can grant SYSTEM_ALERT_WINDOW. The overlay is what lets us keep the
+     * screen on without ever showing a lockscreen — see KrakenScreenOverlayManager.
+     */
+    private fun launchOverlayPermission() {
+        if (Settings.canDrawOverlays(this)) {
+            onPermissionStepFinished()
+            return
+        }
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            "package:$packageName".toUri()
+        )
+        Toast.makeText(
+            this,
+            "Allow Kraken Dive Photo to display over other apps",
+            Toast.LENGTH_LONG
+        ).show()
+        systemSettingsLauncher.launch(intent)
     }
 
     private fun onPermissionStepFinished() {

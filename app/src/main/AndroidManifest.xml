@@ -29,6 +29,12 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
 
+    <!-- Transparent system overlay over Camera / Photos so the screen never
+         truly turns off during a dive. The overlay holds FLAG_KEEP_SCREEN_ON
+         and dims its own per-window brightness when the diver is idle, which
+         lets us avoid the secure keyguard entirely without burning battery. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true"/>
 
     <application

@@ -37,8 +37,9 @@ Gallery mode opens the most recently captured photo or video directly in single-
 1. Install from Google Play or sideload the APK
 2. Grant permissions when prompted: Bluetooth, Location, Notifications, Photos/Videos
 3. Enable the accessibility service: **Settings > Accessibility > Kraken Dive Photo**
-4. Open the app, tap **Connect to Kraken**
-5. Wait for "Ready" status, then place the phone in the housing
+4. Allow display over other apps when prompted (keeps the screen reachable underwater — see below)
+5. Open the app, tap **Connect to Kraken**
+6. Wait for "Ready" status, then place the phone in the housing
 
 ### Permissions
 
@@ -48,12 +49,17 @@ Gallery mode opens the most recently captured photo or video directly in single-
 | Location | Required by Android for BLE scanning |
 | Notifications | Foreground service notification (connection status) |
 | Photos & Videos | Query MediaStore to open the latest capture in gallery mode |
+| Display over other apps | Keep the screen on without hitting the lockscreen, while dimming to save battery |
 
 On Android 14+, grant **full** photo access ("Allow all") rather than "Select photos" — partial access prevents the app from finding your latest capture.
 
 ### Why does Kraken Dive Photo need an accessibility service?
 
 Android provides no public API to trigger the camera shutter or navigate Google Photos from a third-party app. The accessibility service injects tap gestures and key events into these apps on your behalf — necessary because the phone is sealed inside a dive housing and the touchscreen is inaccessible. No user data is collected, read, or transmitted.
+
+### Why does Kraken Dive Photo need to display over other apps?
+
+A secure lockscreen (PIN, fingerprint, face unlock) cannot be cleared underwater, and on most modern Android phones it cannot be disabled either (stored credentials, work profiles, OEM policy). The lockscreen only engages after the screen turns off — so while you are connected, the app keeps the screen on with a transparent, fully transparent overlay that blocks no touches. After ~30 seconds without a button press the overlay dims itself to the hardware minimum to save battery. Pressing any housing button restores full brightness instantly. The overlay attaches when you connect and detaches when you disconnect or swipe the app from Recents.
 
 ## Privacy
 

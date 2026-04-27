@@ -95,6 +95,10 @@ class KrakenBleService : Service() {
     // Wake lock to keep screen on during video recording
     private var videoRecordingWakeLock: PowerManager.WakeLock? = null
 
+    // Transparent overlay that keeps the screen on (no keyguard) and dims
+    // itself between button events to save battery. See KrakenScreenOverlayManager.
+    private lateinit var overlayManager: KrakenScreenOverlayManager
+
     // Camera mode tracking: false = photo, true = video
     @Volatile private var isVideoMode = false
 
@@ -273,6 +277,7 @@ class KrakenBleService : Service() {
         bluetoothAdapter = bluetoothManager.adapter
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        overlayManager = KrakenScreenOverlayManager(this)
 
         // Restore last connected device from disk so reconnection survives process death
         val savedMac = prefs.getString(PREF_LAST_DEVICE_MAC, null)
@@ -290,6 +295,7 @@ class KrakenBleService : Service() {
                 // User-initiated: reset state, scan for any Kraken device
                 resetState()
                 startForeground(NOTIFICATION_ID, createNotification("Connecting..."))
+                overlayManager.start()
                 startScan()
             }
             ACTION_DISCONNECT -> {
@@ -302,6 +308,7 @@ class KrakenBleService : Service() {
                 // button, swipe from Recents) clear the persisted MAC, so this path
                 // only triggers after an unintended kill.
                 startForeground(NOTIFICATION_ID, createNotification("Reconnecting..."))
+                overlayManager.start()
                 reconnectToPersistedDevice()
             }
         }
@@ -482,7 +489,12 @@ class KrakenBleService : Service() {
         }
         
         Log.d(TAG, "Button event: 0x${code.toString(16)}")
-        
+
+        // Reset the overlay's idle dimmer and bring the screen back to full
+        // brightness. With the overlay attached the system never powers the
+        // panel off, so this is the only restore path we need.
+        overlayManager.onUserActivity()
+
         // Check if screen is off - if so, wake device first
         if (!powerManager.isInteractive) {
             Log.i(TAG, "Screen is off - waking device")
@@ -955,6 +967,7 @@ class KrakenBleService : Service() {
         stopConnectionMonitoring()
         releaseConnectionWakeLock()
         releaseVideoRecordingWakeLock()
+        if (::overlayManager.isInitialized) overlayManager.stop()
         handler.removeCallbacksAndMessages(null)
         bluetoothGatt?.let {
             it.disconnect()
@@ -999,6 +1012,10 @@ class KrakenBleService : Service() {
 
     /** Query the most recent media file from MediaStore. */
     internal fun testQueryLatestMedia(): Pair<Uri, String>? = queryLatestMedia()
+
+    /** Direct access to the screen overlay manager for BDD assertions. */
+    internal val testOverlayManager: KrakenScreenOverlayManager? get() =
+        if (::overlayManager.isInitialized) overlayManager else null
 
     // ────────────────────────────────────────────────────────────────────────
 

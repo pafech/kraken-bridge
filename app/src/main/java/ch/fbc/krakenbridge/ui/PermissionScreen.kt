@@ -29,6 +29,7 @@ fun PermissionScreen(
     groups: List<PermissionGroupState>,
     batteryOptimizationExempt: Boolean,
     accessibilityEnabled: Boolean,
+    displayOverlayGranted: Boolean,
     onContinue: () -> Unit
 ) {
     val rows = groups + listOf(
@@ -41,6 +42,11 @@ fun PermissionScreen(
             name = "Accessibility",
             reason = "Control camera apps via housing buttons",
             isGranted = accessibilityEnabled
+        ),
+        PermissionGroupState(
+            name = "Display",
+            reason = "Keep screen reachable underwater without lockscreen",
+            isGranted = displayOverlayGranted
         )
     )
 
