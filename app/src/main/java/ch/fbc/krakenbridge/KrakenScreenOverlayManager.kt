@@ -63,7 +63,24 @@ class KrakenScreenOverlayManager(private val context: Context) {
 
     private val dimRunnable = Runnable { dim() }
 
-    fun start() {
+    /**
+     * Public methods are callable from any thread (BLE callbacks fire on a
+     * Binder thread). All WindowManager mutations are marshalled onto the
+     * main looper, since `addView` / `updateViewLayout` / `removeView`
+     * require the thread that owns the View — which for an overlay is the
+     * main thread.
+     */
+    fun start() = handler.post { startOnMain() }
+
+    fun stop() = handler.post { stopOnMain() }
+
+    /**
+     * Reset the idle timer and bring the screen back to full brightness.
+     * Idempotent — safe to call on every BLE event.
+     */
+    fun onUserActivity() = handler.post { restoreBrightnessOnMain() }
+
+    private fun startOnMain() {
         if (view != null) return
         if (!Settings.canDrawOverlays(context)) {
             Log.w(TAG, "SYSTEM_ALERT_WINDOW not granted — overlay not started")
@@ -106,7 +123,7 @@ class KrakenScreenOverlayManager(private val context: Context) {
         Log.i(TAG, "Overlay attached, idle timeout=${idleTimeoutMs}ms")
     }
 
-    fun stop() {
+    private fun stopOnMain() {
         handler.removeCallbacks(dimRunnable)
         view?.let {
             try {
@@ -120,11 +137,7 @@ class KrakenScreenOverlayManager(private val context: Context) {
         Log.i(TAG, "Overlay detached")
     }
 
-    /**
-     * Reset the idle timer and bring the screen back to full brightness.
-     * Idempotent — safe to call on every BLE event.
-     */
-    fun onUserActivity() {
+    private fun restoreBrightnessOnMain() {
         val params = layoutParams ?: return
         val v = view ?: return
         if (params.screenBrightness != brightBrightness) {
@@ -132,8 +145,12 @@ class KrakenScreenOverlayManager(private val context: Context) {
             try {
                 windowManager.updateViewLayout(v, params)
                 Log.d(TAG, "Brightness restored on user activity")
-            } catch (e: IllegalArgumentException) {
-                // View detached between checks
+            } catch (e: Exception) {
+                // updateViewLayout may throw IllegalArgumentException if the
+                // view detached between checks, or other RuntimeExceptions
+                // from the WindowManager. Either way we are not the right
+                // thread or the window is gone — log and move on.
+                Log.w(TAG, "updateViewLayout failed on restore", e)
                 return
             }
         }
@@ -152,8 +169,8 @@ class KrakenScreenOverlayManager(private val context: Context) {
         try {
             windowManager.updateViewLayout(v, params)
             Log.d(TAG, "Overlay dimmed (idle)")
-        } catch (e: IllegalArgumentException) {
-            // View detached between checks
+        } catch (e: Exception) {
+            Log.w(TAG, "updateViewLayout failed on dim", e)
         }
     }
 
@@ -163,10 +180,10 @@ class KrakenScreenOverlayManager(private val context: Context) {
 
     internal val testIsAttached: Boolean get() = view != null
     internal val testCurrentBrightness: Float? get() = layoutParams?.screenBrightness
-    internal fun testForceDim() = dim()
+    internal fun testForceDim() = handler.post { dim() }
     internal fun testSetIdleTimeoutMs(ms: Long) {
         idleTimeoutMs = ms
-        if (view != null) scheduleDim()
+        handler.post { if (view != null) scheduleDim() }
     }
 
     companion object {
