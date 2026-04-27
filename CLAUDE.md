@@ -9,7 +9,7 @@ This file is for the **next AI coding agent** picking up the repo. It
 captures the architecture, conventions, and traps that aren't obvious
 from `git log` alone. Read it before making changes.
 
-## Architecture in four pieces
+## Architecture in five pieces
 
 ```
 MainActivity (Compose UI)
@@ -18,11 +18,16 @@ MainActivity (Compose UI)
 KrakenBleService (foreground service, BLE)
    │  on button event:
    │    handleButtonEvent → injectKey or dispatchGesture
+   │                     → overlayManager.onUserActivity()
    ▼                                    ▲
 KrakenAccessibilityService ─────────────┘
    │  also: startActivity(KrakenWakeActivity) when screen is off
    ▼
 KrakenWakeActivity (transparent, no UI) — wakes screen, dismisses keyguard
+
+KrakenScreenOverlayManager (owned by BleService)
+   ▲ adds a transparent system overlay with FLAG_KEEP_SCREEN_ON for the
+     entire connected session, dimming its own brightness when idle.
 ```
 
 - `MainActivity` runs the permission walkthrough (single Continue CTA →
@@ -36,6 +41,25 @@ KrakenWakeActivity (transparent, no UI) — wakes screen, dismisses keyguard
 - `KrakenWakeActivity` exists because `FULL_WAKE_LOCK` is a no-op on
   Android 10+. The service starts this transparent activity to flip
   `setTurnScreenOn(true)` and `requestDismissKeyguard()`.
+- `KrakenScreenOverlayManager` keeps a transparent full-screen overlay
+  attached during the connected session so the system never powers the
+  panel off — the keyguard therefore never engages. Per-window
+  `screenBrightness` drops to `0f` (hardware minimum, near-zero on OLED)
+  after 30 s of BLE silence and snaps back to `BRIGHTNESS_OVERRIDE_NONE`
+  on every button event. Touches pass through (`FLAG_NOT_TOUCHABLE`),
+  so Camera and Photos remain fully interactive.
+
+### Why the overlay exists (and why nothing simpler works)
+
+A diver in a sealed housing cannot enter PIN / fingerprint / face unlock
+underwater. On modern Android, "Screen lock = None" is usually unavailable
+(stored VPN / Enterprise WiFi credentials, work profiles, OEM policy all
+force a secure lock). `requestDismissKeyguard()` does not bypass a secure
+keyguard. Smart Lock / Extend Unlock has a hard 4-hour cap that breaks
+multi-dive days. The only remaining lever is to ensure the screen never
+actually turns off — which is what the overlay does. Battery is preserved
+because we control brightness ourselves (OLED at brightness 0 is near-black
+at near-zero power).
 
 ## Lifecycle — the user's mental model
 
@@ -138,6 +162,18 @@ lives only on the maintainer's machine and in CI as a base64 secret.
   Cucumber scenarios.
 - **Camera key wakes the screen on most ROMs**, but `setTurnScreenOn`
   via `KrakenWakeActivity` is the explicit, modern path.
+- **The overlay can be hidden by a foreground app on Android 12+** via
+  `WindowInsetsController.setHideOverlayWindows(true)`. Google Camera and
+  Google Photos do not currently use this, but if a future update does,
+  the overlay disappears while that app is foreground — and with it the
+  keyguard protection. There is no public way to detect this from our
+  side; the only signal is "screen unexpectedly went off mid-dive". If
+  this turns up in the field, the fallback is a haptic / audio warning
+  alongside the overlay (Phase 2).
+- **`SYSTEM_ALERT_WINDOW` is a Special App Access**, not a runtime
+  permission. The walkthrough drops the user into
+  `Settings.ACTION_MANAGE_OVERLAY_PERMISSION`; there is no programmatic
+  request dialog and there is no permission-rationale callback.
 - **Android 14+ partial photo access** ("Select photos") returns an
   empty MediaStore for newest captures. `hasPartialMediaAccess()`
   detects this and routes the user to app settings.
@@ -169,6 +205,7 @@ app/src/main/java/ch/fbc/krakenbridge/
    KrakenBleService.kt          — BLE foreground service
    KrakenAccessibilityService.kt — key/gesture injection
    KrakenWakeActivity.kt        — screen wake (transparent, no UI)
+   KrakenScreenOverlayManager.kt — keep-screen-on overlay + idle dimmer
    ui/
      MainScreen.kt              — Compose home (status hero + Connect CTA)
      PermissionScreen.kt        — single-CTA walkthrough screen
