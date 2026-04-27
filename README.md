@@ -59,7 +59,7 @@ Android provides no public API to trigger the camera shutter or navigate Google 
 
 ### Why does Kraken Dive Photo need to display over other apps?
 
-A secure lockscreen (PIN, fingerprint, face unlock) cannot be cleared underwater, and on most modern Android phones it cannot be disabled either (stored credentials, work profiles, OEM policy). The lockscreen only engages after the screen turns off — so while you are connected, the app keeps the screen on with a transparent, fully transparent overlay that blocks no touches. After ~30 seconds without a button press the overlay dims itself to the hardware minimum to save battery. Pressing any housing button restores full brightness instantly. The overlay attaches when you connect and detaches when you disconnect or swipe the app from Recents.
+A secure lockscreen (PIN, fingerprint, face unlock) cannot be cleared underwater, and on most modern Android phones it cannot be disabled either (stored credentials, work profiles, OEM policy). The lockscreen only engages after the screen turns off — so while you are connected, the app keeps the screen on with a transparent, fully transparent overlay that blocks no touches. After ~30 seconds without input the overlay dims itself to the hardware minimum to save battery. The brightness comes back instantly on any of: a housing button press, a touch on the screen, or pressing the power key. The overlay attaches when you connect and detaches when you disconnect or swipe the app from Recents.
 
 ## Privacy
 

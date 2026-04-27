@@ -46,8 +46,11 @@ KrakenScreenOverlayManager (owned by BleService)
   panel off — the keyguard therefore never engages. Per-window
   `screenBrightness` drops to `0f` (hardware minimum, near-zero on OLED)
   after 30 s of BLE silence and snaps back to `BRIGHTNESS_OVERRIDE_NONE`
-  on every button event. Touches pass through (`FLAG_NOT_TOUCHABLE`),
-  so Camera and Photos remain fully interactive.
+  on three signals: any housing button event, any system touch interaction
+  (forwarded by the accessibility service via
+  `TYPE_TOUCH_INTERACTION_START`), and the `ACTION_SCREEN_ON` /
+  `ACTION_USER_PRESENT` system broadcasts. Touches pass through
+  (`FLAG_NOT_TOUCHABLE`), so Camera and Photos remain fully interactive.
 
 ### Why the overlay exists (and why nothing simpler works)
 
@@ -174,6 +177,15 @@ lives only on the maintainer's machine and in CI as a base64 secret.
   permission. The walkthrough drops the user into
   `Settings.ACTION_MANAGE_OVERLAY_PERMISSION`; there is no programmatic
   request dialog and there is no permission-rationale callback.
+- **`WindowManager.addView` / `updateViewLayout` / `removeView` must run
+  on the thread that owns the View** — for an overlay that's the main
+  thread. BLE GATT callbacks fire on a Binder thread, so every public
+  entry point on `KrakenScreenOverlayManager` posts onto a main-looper
+  `Handler` first. Calling those WindowManager methods from a binder
+  thread throws `CalledFromWrongThreadException`, which is **not** an
+  `IllegalArgumentException` — narrow `catch` clauses there silently
+  swallow the failure and the brightness restore never happens (this
+  bit us once, see `fix: marshal WindowManager calls to main thread`).
 - **Android 14+ partial photo access** ("Select photos") returns an
   empty MediaStore for newest captures. `hasPartialMediaAccess()`
   detects this and routes the user to app settings.
