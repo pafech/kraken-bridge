@@ -4,9 +4,11 @@ import android.annotation.SuppressLint
 import android.app.*
 import android.bluetooth.*
 import android.bluetooth.le.*
+import android.content.BroadcastReceiver
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.*
@@ -98,6 +100,22 @@ class KrakenBleService : Service() {
     // Transparent overlay that keeps the screen on (no keyguard) and dims
     // itself between button events to save battery. See KrakenScreenOverlayManager.
     private lateinit var overlayManager: KrakenScreenOverlayManager
+
+    // Reset the overlay's dim state on system-level user-presence signals.
+    // ACTION_USER_PRESENT fires after a successful unlock (e.g. before the
+    // dive); ACTION_SCREEN_ON only fires on a real off→on transition, which
+    // FLAG_KEEP_SCREEN_ON normally suppresses while we are connected, but
+    // it's a useful safety net during the brief windows between connect /
+    // disconnect when the overlay isn't attached.
+    private val screenStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_ON,
+                Intent.ACTION_USER_PRESENT -> notifyUserActivity()
+            }
+        }
+    }
+    private var screenReceiverRegistered = false
 
     // Camera mode tracking: false = photo, true = video
     @Volatile private var isVideoMode = false
@@ -279,6 +297,15 @@ class KrakenBleService : Service() {
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         overlayManager = KrakenScreenOverlayManager(this)
 
+        val screenFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        ContextCompat.registerReceiver(
+            this, screenStateReceiver, screenFilter, ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        screenReceiverRegistered = true
+
         // Restore last connected device from disk so reconnection survives process death
         val savedMac = prefs.getString(PREF_LAST_DEVICE_MAC, null)
         if (savedMac != null && lastConnectedDevice == null) {
@@ -364,6 +391,14 @@ class KrakenBleService : Service() {
         super.onDestroy()
         if (instance == this) {
             instance = null
+        }
+        if (screenReceiverRegistered) {
+            try {
+                unregisterReceiver(screenStateReceiver)
+            } catch (e: IllegalArgumentException) {
+                // Already unregistered
+            }
+            screenReceiverRegistered = false
         }
         // System is tearing down the service — release resources but keep
         // the persisted MAC so START_STICKY can reconnect after an OOM-kill.
@@ -1016,6 +1051,16 @@ class KrakenBleService : Service() {
     /** Direct access to the screen overlay manager for BDD assertions. */
     internal val testOverlayManager: KrakenScreenOverlayManager? get() =
         if (::overlayManager.isInitialized) overlayManager else null
+
+    /**
+     * Forwarded from [KrakenAccessibilityService] when the diver touches the
+     * screen, and from [screenStateReceiver] when the system surfaces a
+     * user-presence event. Restores the overlay's brightness so the diver
+     * never gets stuck on a dimmed screen.
+     */
+    fun notifyUserActivity() {
+        if (::overlayManager.isInitialized) overlayManager.onUserActivity()
+    }
 
     // ────────────────────────────────────────────────────────────────────────
 
