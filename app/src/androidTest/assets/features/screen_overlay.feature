@@ -39,3 +39,28 @@ Feature: Screen overlay keeps the dive accessible without a lockscreen
     Given the overlay is attached
     When the user swipes the app from Recents
     Then the overlay window is detached
+
+  @manual
+  Scenario: Overlay stays bright during video recording
+    Given the overlay is attached
+    And the idle timeout is set to 500 milliseconds
+    When a video recording starts
+    And 1 second passes without a button event
+    Then the overlay brightness is at the bright level
+    And the keep-bright flag is set
+
+  @manual
+  Scenario: Idle dimmer resumes when video recording stops
+    Given the overlay is attached
+    And a video recording is in progress
+    When the video recording stops
+    Then the keep-bright flag is cleared
+    And the idle timer is running
+
+  @manual
+  Scenario: First button press on a dimmed overlay only wakes
+    Given the overlay is attached and dimmed
+    And the camera has not been opened yet this session
+    When the shutter button is pressed
+    Then the overlay brightness is back at the bright level
+    And the camera-open flag is still cleared

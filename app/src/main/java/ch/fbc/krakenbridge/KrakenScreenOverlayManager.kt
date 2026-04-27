@@ -61,6 +61,22 @@ class KrakenScreenOverlayManager(private val context: Context) {
     private val dimBrightness: Float = DIM_BRIGHTNESS
     private val brightBrightness: Float = BRIGHT_BRIGHTNESS
 
+    // Reflects the visible brightness state. Mutated only on the main
+    // thread inside dim() / restoreBrightnessOnMain(); read from any
+    // thread by [consumeWakeIfDim] so the BLE service can decide whether
+    // to absorb the originating button event.
+    @Volatile
+    private var isDim: Boolean = false
+
+    /**
+     * When true the idle dimmer is suspended and the overlay stays at full
+     * brightness no matter how long since the last user activity. Used by
+     * the BLE service while a video recording is in progress — divers
+     * routinely shoot longer than the 30 s idle window and need to keep an
+     * eye on framing.
+     */
+    private var keepBright: Boolean = false
+
     private val dimRunnable = Runnable { dim() }
 
     /**
@@ -79,6 +95,42 @@ class KrakenScreenOverlayManager(private val context: Context) {
      * Idempotent — safe to call on every BLE event.
      */
     fun onUserActivity() = handler.post { restoreBrightnessOnMain() }
+
+    /**
+     * Wake the overlay and tell the caller whether the visible brightness
+     * was actually dim at the moment of the call. The BLE service uses
+     * this to absorb the originating button press: a diver who taps a
+     * housing button on a dimmed screen expects the first tap to *wake*,
+     * not to take a photo / start a recording / switch modes. The next
+     * press (after the dim is gone) does the real action.
+     *
+     * Returns the dim state synchronously even though the brightness
+     * restore is dispatched onto the main thread, so the caller can act
+     * on the answer right away.
+     */
+    fun consumeWakeIfDim(): Boolean {
+        val wasDim = isDim
+        handler.post { restoreBrightnessOnMain() }
+        return wasDim
+    }
+
+    /**
+     * Suspend (true) or resume (false) the idle dimmer. While suspended the
+     * overlay is held at full brightness and no auto-dim is scheduled, so a
+     * long video recording does not cut to black mid-shot.
+     */
+    fun setKeepBright(active: Boolean) = handler.post {
+        if (keepBright == active) return@post
+        keepBright = active
+        if (active) {
+            handler.removeCallbacks(dimRunnable)
+            restoreBrightnessOnMain()
+            Log.i(TAG, "Idle dimmer suspended (keep-bright)")
+        } else {
+            scheduleDim()
+            Log.i(TAG, "Idle dimmer resumed")
+        }
+    }
 
     private fun startOnMain() {
         if (view != null) return
@@ -144,6 +196,7 @@ class KrakenScreenOverlayManager(private val context: Context) {
             params.screenBrightness = brightBrightness
             try {
                 windowManager.updateViewLayout(v, params)
+                isDim = false
                 Log.d(TAG, "Brightness restored on user activity")
             } catch (e: Exception) {
                 // updateViewLayout may throw IllegalArgumentException if the
@@ -159,6 +212,7 @@ class KrakenScreenOverlayManager(private val context: Context) {
 
     private fun scheduleDim() {
         handler.removeCallbacks(dimRunnable)
+        if (keepBright) return
         handler.postDelayed(dimRunnable, idleTimeoutMs)
     }
 
@@ -168,6 +222,7 @@ class KrakenScreenOverlayManager(private val context: Context) {
         params.screenBrightness = dimBrightness
         try {
             windowManager.updateViewLayout(v, params)
+            isDim = true
             Log.d(TAG, "Overlay dimmed (idle)")
         } catch (e: Exception) {
             Log.w(TAG, "updateViewLayout failed on dim", e)
@@ -180,6 +235,7 @@ class KrakenScreenOverlayManager(private val context: Context) {
 
     internal val testIsAttached: Boolean get() = view != null
     internal val testCurrentBrightness: Float? get() = layoutParams?.screenBrightness
+    internal val testIsKeepBright: Boolean get() = keepBright
     internal fun testForceDim() = handler.post { dim() }
     internal fun testSetIdleTimeoutMs(ms: Long) {
         idleTimeoutMs = ms
@@ -189,8 +245,12 @@ class KrakenScreenOverlayManager(private val context: Context) {
     companion object {
         private const val TAG = "KrakenOverlay"
 
-        /** Default time of BLE silence before we drop the brightness. */
-        const val DEFAULT_IDLE_TIMEOUT_MS = 30_000L
+        /**
+         * Default time of BLE / touch / system silence before the overlay
+         * dims itself. Long enough to frame a shot, observe the subject,
+         * and time the shutter without the screen going dark mid-wait.
+         */
+        const val DEFAULT_IDLE_TIMEOUT_MS = 45_000L
 
         /**
          * Hardware minimum brightness. OLED panels render this as near-black

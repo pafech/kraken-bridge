@@ -525,10 +525,16 @@ class KrakenBleService : Service() {
         
         Log.d(TAG, "Button event: 0x${code.toString(16)}")
 
-        // Reset the overlay's idle dimmer and bring the screen back to full
-        // brightness. With the overlay attached the system never powers the
-        // panel off, so this is the only restore path we need.
-        overlayManager.onUserActivity()
+        // Wake the overlay first. If the screen was dimmed, swallow the
+        // event: the diver tapped to wake, not to act. The next press
+        // takes the photo / focuses / switches mode as usual. Without
+        // this, the diver who's been observing a subject for a minute
+        // would lose their composed shot to a wake-tap that fired the
+        // shutter immediately.
+        if (overlayManager.consumeWakeIfDim()) {
+            Log.d(TAG, "Button absorbed as wake-tap (overlay was dim)")
+            return
+        }
 
         // Check if screen is off - if so, wake device first
         if (!powerManager.isInteractive) {
@@ -885,6 +891,7 @@ class KrakenBleService : Service() {
             )
         }
         videoRecordingWakeLock?.acquire(60 * 60 * 1000L) // 1 hour max for a single video
+        if (::overlayManager.isInitialized) overlayManager.setKeepBright(true)
         Log.i(TAG, "Video recording wake lock acquired - screen will stay on")
     }
 
@@ -895,6 +902,7 @@ class KrakenBleService : Service() {
                 Log.i(TAG, "Video recording wake lock released")
             }
         }
+        if (::overlayManager.isInitialized) overlayManager.setKeepBright(false)
     }
     
     private fun startConnectionMonitoring() {

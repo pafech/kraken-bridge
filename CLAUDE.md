@@ -45,12 +45,22 @@ KrakenScreenOverlayManager (owned by BleService)
   attached during the connected session so the system never powers the
   panel off — the keyguard therefore never engages. Per-window
   `screenBrightness` drops to `0f` (hardware minimum, near-zero on OLED)
-  after 30 s of BLE silence and snaps back to `BRIGHTNESS_OVERRIDE_NONE`
+  after 45 s of input silence and snaps back to `BRIGHTNESS_OVERRIDE_NONE`
   on three signals: any housing button event, any system touch interaction
   (forwarded by the accessibility service via
   `TYPE_TOUCH_INTERACTION_START`), and the `ACTION_SCREEN_ON` /
   `ACTION_USER_PRESENT` system broadcasts. Touches pass through
   (`FLAG_NOT_TOUCHABLE`), so Camera and Photos remain fully interactive.
+  Two carve-outs to the idle dimmer:
+  - `setKeepBright(true)` suspends auto-dim entirely. Toggled from
+    `acquireVideoRecordingWakeLock` / `releaseVideoRecordingWakeLock` so a
+    long video recording does not cut to black mid-shot.
+  - `consumeWakeIfDim()` lets the BLE service treat the first button
+    press on a dimmed overlay as a wake-only event: brightness is
+    restored, but `handleButtonEvent` returns before invoking any
+    camera / gallery action. Touch and system-broadcast wake paths
+    intentionally do **not** absorb — those represent direct user
+    interaction with the underlying app and should reach it.
 
 ### Why the overlay exists (and why nothing simpler works)
 

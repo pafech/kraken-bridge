@@ -123,4 +123,67 @@ class ScreenOverlaySteps {
         // simulating the actual swipe gesture.
         userDisconnect()
     }
+
+    @When("a video recording starts")
+    fun videoRecordingStarts() {
+        val service = KrakenBleService.instance ?: error("Service not running")
+        // Switch into video mode if needed, then trigger record-start.
+        if (!service.testIsVideoMode) {
+            service.simulateButtonPress(KrakenBleService.BTN_FN_PRESS)
+            Thread.sleep(800)
+        }
+        if (!service.testIsRecording) {
+            service.simulateButtonPress(KrakenBleService.BTN_SHUTTER_PRESS)
+            Thread.sleep(500)
+        }
+    }
+
+    @Given("a video recording is in progress")
+    fun ensureRecordingInProgress() {
+        videoRecordingStarts()
+    }
+
+    @When("the video recording stops")
+    fun videoRecordingStops() {
+        val service = KrakenBleService.instance ?: error("Service not running")
+        if (service.testIsRecording) {
+            service.simulateButtonPress(KrakenBleService.BTN_SHUTTER_PRESS)
+            Thread.sleep(500)
+        }
+    }
+
+    @Then("the keep-bright flag is set")
+    fun assertKeepBrightSet() {
+        val overlay = KrakenBleService.instance!!.testOverlayManager!!
+        check(overlay.testIsKeepBright) { "keep-bright flag is not set" }
+    }
+
+    @Then("the keep-bright flag is cleared")
+    fun assertKeepBrightCleared() {
+        val overlay = KrakenBleService.instance!!.testOverlayManager!!
+        check(!overlay.testIsKeepBright) { "keep-bright flag is still set" }
+    }
+
+    @Then("the idle timer is running")
+    fun assertIdleTimerRunning() {
+        // Behavioural assertion: keep-bright is cleared, so scheduleDim has
+        // re-armed the runnable. We verify by waiting just past the (test)
+        // timeout and observing that the brightness drops.
+        Thread.sleep(700)
+        assertDimmed()
+    }
+
+    @Given("the camera has not been opened yet this session")
+    fun ensureCameraNotOpened() {
+        val service = KrakenBleService.instance ?: error("Service not running")
+        check(!service.testCameraIsOpen) { "Camera was already opened this session" }
+    }
+
+    @Then("the camera-open flag is still cleared")
+    fun assertCameraOpenFlagCleared() {
+        val service = KrakenBleService.instance ?: error("Service not running")
+        check(!service.testCameraIsOpen) {
+            "Camera-open flag was set — wake-tap was not absorbed"
+        }
+    }
 }
