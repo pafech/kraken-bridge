@@ -10,12 +10,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.*
 import android.provider.MediaStore
 import android.util.Log
 import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
@@ -321,7 +323,7 @@ class KrakenBleService : Service() {
             ACTION_CONNECT -> {
                 // User-initiated: reset state, scan for any Kraken device
                 resetState()
-                startForeground(NOTIFICATION_ID, createNotification("Connecting..."))
+                startForegroundConnectedDevice("Connecting...")
                 overlayManager.start()
                 startScan()
             }
@@ -334,12 +336,32 @@ class KrakenBleService : Service() {
                 // 5s or the system kills us again. User-initiated closes (Disconnect
                 // button, swipe from Recents) clear the persisted MAC, so this path
                 // only triggers after an unintended kill.
-                startForeground(NOTIFICATION_ID, createNotification("Reconnecting..."))
+                startForegroundConnectedDevice("Reconnecting...")
                 overlayManager.start()
                 reconnectToPersistedDevice()
             }
         }
         return START_STICKY
+    }
+
+    /**
+     * Pass the FGS type explicitly via [ServiceCompat.startForeground]. The
+     * two-arg form (id + notification) leaves Android to infer the type from
+     * the manifest, but on API 34+/36 that inference path can throw at
+     * call-time even with the runtime permission granted — the supported,
+     * version-safe path on minSdk 26+ is the explicit type argument.
+     */
+    private fun startForegroundConnectedDevice(status: String) {
+        ServiceCompat.startForeground(
+            this,
+            NOTIFICATION_ID,
+            createNotification(status),
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            } else {
+                0
+            }
+        )
     }
 
     private fun reconnectToPersistedDevice() {
@@ -427,7 +449,9 @@ class KrakenBleService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Kraken Dive Photo")
             .setContentText(status)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            // App-owned drawable: framework-namespaced small icons can be
+            // rejected by API 34+/36 with `Bad notification for startForeground`.
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
