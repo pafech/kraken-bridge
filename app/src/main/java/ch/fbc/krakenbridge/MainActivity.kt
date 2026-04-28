@@ -21,31 +21,45 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import ch.fbc.krakenbridge.ui.FeatureSelectionScreen
 import ch.fbc.krakenbridge.ui.KrakenBridgeTheme
 import ch.fbc.krakenbridge.ui.MainScreen
-import ch.fbc.krakenbridge.ui.PermissionGroupState
+import ch.fbc.krakenbridge.ui.PermissionRowState
 import ch.fbc.krakenbridge.ui.PermissionScreen
 
 class MainActivity : ComponentActivity() {
 
+    private enum class AppScreen { Features, Permissions, Main }
+
+    private lateinit var featureRepo: FeatureRepository
+    private lateinit var permLog: PermissionRequestLog
+
+    private var currentScreen by mutableStateOf(AppScreen.Features)
+    private var features by mutableStateOf(Features.CameraOnly)
+
     private var connectionStatus by mutableStateOf("disconnected")
     private var statusMessage by mutableStateOf("")
-    private var accessibilityEnabled by mutableStateOf(false)
     private var showHelpDialog by mutableStateOf(false)
-    private var allPermissionsGranted by mutableStateOf(false)
+
+    // Per-permission grant state
+    private var bluetoothGranted by mutableStateOf(false)
+    private var bluetoothNeedsSettings by mutableStateOf(false)
+    private var locationGranted by mutableStateOf(false)
+    private var locationNeedsSettings by mutableStateOf(false)
+    private var notificationsGranted by mutableStateOf(false)
+    private var notificationsNeedsSettings by mutableStateOf(false)
+    private var mediaGranted by mutableStateOf(false)
+    private var mediaNeedsSettings by mutableStateOf(false)
+    private var hasPartialMedia by mutableStateOf(false)
     private var batteryOptimizationExempt by mutableStateOf(false)
+    private var accessibilityEnabled by mutableStateOf(false)
     private var displayOverlayGranted by mutableStateOf(false)
 
-    private var bluetoothGranted by mutableStateOf(false)
-    private var locationGranted by mutableStateOf(false)
-    private var mediaGranted by mutableStateOf(false)
-    private var notificationsGranted by mutableStateOf(false)
-
-    // Drives the single-CTA walkthrough: once the user taps Continue we run each
-    // pending request sequentially, advancing in each launcher's callback. We
-    // stop as soon as a step fails to grant so the user isn't trapped in a loop.
+    // Drives the single-CTA walkthrough: each tap advances to the next pending
+    // step. Stops once a step is permanently denied so the user isn't trapped.
     private var walkthroughActive = false
     private var lastWalkthroughStep: String? = null
 
@@ -97,6 +111,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        featureRepo = FeatureRepository(this)
+        permLog = PermissionRequestLog(this)
+        features = featureRepo.load()
+        currentScreen = if (featureRepo.isConfigured()) AppScreen.Permissions else AppScreen.Features
 
         setContent {
             KrakenBridgeTheme {
@@ -104,44 +122,40 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    if (allPermissionsGranted) {
-                        MainScreen(
+                    when (currentScreen) {
+                        AppScreen.Features -> FeatureSelectionScreen(
+                            initial = features,
+                            onContinue = { selected ->
+                                features = selected
+                                featureRepo.save(selected)
+                                walkthroughActive = false
+                                lastWalkthroughStep = null
+                                refreshPermissionState()
+                                currentScreen = decideScreenAfterConfig()
+                            },
+                            onCancel = if (featureRepo.isConfigured()) {
+                                {
+                                    // Re-entered Settings → back out without changes
+                                    features = featureRepo.load()
+                                    currentScreen = decideScreenAfterConfig()
+                                }
+                            } else null
+                        )
+                        AppScreen.Permissions -> PermissionScreen(
+                            rows = buildPermissionRows(),
+                            onContinue = { startPermissionWalkthrough() },
+                            onOpenAppSettings = { openAppDetailsSettings() }
+                        )
+                        AppScreen.Main -> MainScreen(
+                            features = features,
                             status = connectionStatus,
                             message = statusMessage,
                             showHelpDialog = showHelpDialog,
                             onConnect = { startConnection() },
                             onDisconnect = { stopConnection() },
                             onShowHelp = { showHelpDialog = true },
-                            onDismissHelp = { showHelpDialog = false }
-                        )
-                    } else {
-                        PermissionScreen(
-                            groups = listOf(
-                                PermissionGroupState(
-                                    name = "Bluetooth",
-                                    reason = "Connect to your dive housing remote",
-                                    isGranted = bluetoothGranted
-                                ),
-                                PermissionGroupState(
-                                    name = "Location",
-                                    reason = "Required by Android for Bluetooth scanning",
-                                    isGranted = locationGranted
-                                ),
-                                PermissionGroupState(
-                                    name = "Media",
-                                    reason = "Browse your captures in gallery mode",
-                                    isGranted = mediaGranted
-                                ),
-                                PermissionGroupState(
-                                    name = "Notifications",
-                                    reason = "Show connection status while diving",
-                                    isGranted = notificationsGranted
-                                )
-                            ),
-                            batteryOptimizationExempt = batteryOptimizationExempt,
-                            accessibilityEnabled = accessibilityEnabled,
-                            displayOverlayGranted = displayOverlayGranted,
-                            onContinue = { startPermissionWalkthrough() }
+                            onDismissHelp = { showHelpDialog = false },
+                            onOpenSettings = { currentScreen = AppScreen.Features }
                         )
                     }
                 }
@@ -160,6 +174,9 @@ class MainActivity : ComponentActivity() {
         )
         accessibilityEnabled = isAccessibilityServiceEnabled()
         refreshPermissionState()
+        if (currentScreen == AppScreen.Permissions && allRequiredPermissionsGranted()) {
+            currentScreen = AppScreen.Main
+        }
     }
 
     override fun onPause() {
@@ -171,6 +188,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun decideScreenAfterConfig(): AppScreen =
+        if (allRequiredPermissionsGranted()) AppScreen.Main else AppScreen.Permissions
+
     private fun refreshPermissionState() {
         bluetoothGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             isGranted(Manifest.permission.BLUETOOTH_SCAN) &&
@@ -178,34 +198,135 @@ class MainActivity : ComponentActivity() {
         } else {
             true
         }
+        bluetoothNeedsSettings = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            isPermanentlyDenied(Manifest.permission.BLUETOOTH_SCAN) ||
+                isPermanentlyDenied(Manifest.permission.BLUETOOTH_CONNECT)
+        } else false
 
         locationGranted = isGranted(Manifest.permission.ACCESS_FINE_LOCATION)
-
-        mediaGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            isGranted(Manifest.permission.READ_MEDIA_IMAGES) &&
-                isGranted(Manifest.permission.READ_MEDIA_VIDEO)
-        } else {
-            isGranted(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
+        locationNeedsSettings = isPermanentlyDenied(Manifest.permission.ACCESS_FINE_LOCATION)
 
         notificationsGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             isGranted(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             true
         }
+        notificationsNeedsSettings = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            isPermanentlyDenied(Manifest.permission.POST_NOTIFICATIONS)
+        } else false
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasImages = isGranted(Manifest.permission.READ_MEDIA_IMAGES)
+            val hasVideo = isGranted(Manifest.permission.READ_MEDIA_VIDEO)
+            mediaGranted = hasImages && hasVideo
+            hasPartialMedia = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val hasUserSelected =
+                    isGranted("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")
+                hasUserSelected && !hasImages
+            } else false
+            mediaNeedsSettings =
+                hasPartialMedia ||
+                    isPermanentlyDenied(Manifest.permission.READ_MEDIA_IMAGES) ||
+                    isPermanentlyDenied(Manifest.permission.READ_MEDIA_VIDEO)
+        } else {
+            mediaGranted = isGranted(Manifest.permission.READ_EXTERNAL_STORAGE)
+            mediaNeedsSettings = isPermanentlyDenied(Manifest.permission.READ_EXTERNAL_STORAGE)
+            hasPartialMedia = false
+        }
 
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         batteryOptimizationExempt = pm.isIgnoringBatteryOptimizations(packageName)
 
         displayOverlayGranted = Settings.canDrawOverlays(this)
-
-        allPermissionsGranted = bluetoothGranted && locationGranted &&
-            mediaGranted && notificationsGranted && batteryOptimizationExempt &&
-            accessibilityEnabled && displayOverlayGranted
     }
 
     private fun isGranted(permission: String): Boolean =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Detect "permanently denied" — system silently rejects further requests
+     * and the user must grant in app settings. This is true when the permission
+     * has been requested at least once, is not currently granted, and the
+     * rationale signal is false.
+     */
+    private fun isPermanentlyDenied(permission: String): Boolean {
+        if (isGranted(permission)) return false
+        if (!permLog.wasRequested(permission)) return false
+        return !ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
+    }
+
+    private fun allRequiredPermissionsGranted(): Boolean =
+        bluetoothGranted && locationGranted && notificationsGranted &&
+            batteryOptimizationExempt && accessibilityEnabled &&
+            (!features.gallery || mediaGranted) &&
+            (!features.diveMode || displayOverlayGranted)
+
+    private fun buildPermissionRows(): List<PermissionRowState> = buildList {
+        add(
+            PermissionRowState(
+                name = "Bluetooth",
+                reason = "Connect to your dive housing remote",
+                isGranted = bluetoothGranted,
+                needsSettings = bluetoothNeedsSettings && !bluetoothGranted
+            )
+        )
+        add(
+            PermissionRowState(
+                name = "Location",
+                reason = "Required by Android for Bluetooth scanning",
+                isGranted = locationGranted,
+                needsSettings = locationNeedsSettings && !locationGranted
+            )
+        )
+        add(
+            PermissionRowState(
+                name = "Notifications",
+                reason = "Show connection status while diving",
+                isGranted = notificationsGranted,
+                needsSettings = notificationsNeedsSettings && !notificationsGranted
+            )
+        )
+        if (features.gallery) {
+            add(
+                PermissionRowState(
+                    name = "Photos & Videos",
+                    reason = "Browse your captures in gallery mode",
+                    isGranted = mediaGranted,
+                    needsSettings = mediaNeedsSettings && !mediaGranted,
+                    hint = when {
+                        hasPartialMedia ->
+                            "Selected photos only — pick \"Allow all\" in Settings so dive captures appear"
+                        !mediaGranted && !mediaNeedsSettings ->
+                            "Pick \"Allow all\" — selected/once won't include new dive photos"
+                        else -> null
+                    }
+                )
+            )
+        }
+        add(
+            PermissionRowState(
+                name = "Battery",
+                reason = "Keep the BLE connection alive during your dive",
+                isGranted = batteryOptimizationExempt
+            )
+        )
+        add(
+            PermissionRowState(
+                name = "Accessibility",
+                reason = "Control camera apps via housing buttons",
+                isGranted = accessibilityEnabled
+            )
+        )
+        if (features.diveMode) {
+            add(
+                PermissionRowState(
+                    name = "Display Overlay",
+                    reason = "Keep screen reachable underwater without lockscreen",
+                    isGranted = displayOverlayGranted
+                )
+            )
+        }
+    }
 
     private fun startPermissionWalkthrough() {
         walkthroughActive = true
@@ -216,14 +337,18 @@ class MainActivity : ComponentActivity() {
     private fun advanceWalkthrough() {
         if (!walkthroughActive) return
         refreshPermissionState()
+        if (allRequiredPermissionsGranted()) {
+            walkthroughActive = false
+            currentScreen = AppScreen.Main
+            return
+        }
         val nextStep = nextPendingStep()
         if (nextStep == null) {
             walkthroughActive = false
-            allPermissionsGranted = true
             return
         }
-        // If the same step is still pending after we just requested it, the user
-        // declined or the system blocked it — stop so they can decide what to do.
+        // Same step still pending after we just requested it ⇒ user declined or
+        // the system blocked. Stop so they can hit per-row Settings or back out.
         if (nextStep == lastWalkthroughStep) {
             walkthroughActive = false
             return
@@ -235,27 +360,61 @@ class MainActivity : ComponentActivity() {
     private fun nextPendingStep(): String? = when {
         !bluetoothGranted -> "Bluetooth"
         !locationGranted -> "Location"
-        !mediaGranted -> "Media"
         !notificationsGranted -> "Notifications"
+        features.gallery && !mediaGranted -> "Media"
         !batteryOptimizationExempt -> "Battery"
         !accessibilityEnabled -> "Accessibility"
-        !displayOverlayGranted -> "Display"
+        features.diveMode && !displayOverlayGranted -> "Display"
         else -> null
     }
 
     private fun runWalkthroughStep(step: String) {
         when (step) {
             "Bluetooth" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                bluetoothPermissionLauncher.launch(
-                    arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-                )
+                if (bluetoothNeedsSettings) {
+                    openAppDetailsSettings()
+                    walkthroughActive = false
+                } else {
+                    permLog.markRequested(Manifest.permission.BLUETOOTH_SCAN)
+                    permLog.markRequested(Manifest.permission.BLUETOOTH_CONNECT)
+                    bluetoothPermissionLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.BLUETOOTH_SCAN,
+                            Manifest.permission.BLUETOOTH_CONNECT
+                        )
+                    )
+                }
             } else {
                 onPermissionStepFinished()
             }
-            "Location" -> locationPermissionLauncher.launch(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-            )
-            "Media" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            "Location" -> if (locationNeedsSettings) {
+                openAppDetailsSettings()
+                walkthroughActive = false
+            } else {
+                permLog.markRequested(Manifest.permission.ACCESS_FINE_LOCATION)
+                locationPermissionLauncher.launch(
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+                )
+            }
+            "Notifications" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (notificationsNeedsSettings) {
+                    openAppDetailsSettings()
+                    walkthroughActive = false
+                } else {
+                    permLog.markRequested(Manifest.permission.POST_NOTIFICATIONS)
+                    notificationPermissionLauncher.launch(
+                        arrayOf(Manifest.permission.POST_NOTIFICATIONS)
+                    )
+                }
+            } else {
+                onPermissionStepFinished()
+            }
+            "Media" -> if (mediaNeedsSettings) {
+                // Includes both permanent-denial AND partial-access — both
+                // require manual re-grant in app settings.
+                openAppDetailsSettings()
+                walkthroughActive = false
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val permissions = mutableListOf(
                     Manifest.permission.READ_MEDIA_IMAGES,
                     Manifest.permission.READ_MEDIA_VIDEO
@@ -263,16 +422,11 @@ class MainActivity : ComponentActivity() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     permissions.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
                 }
+                permissions.forEach { permLog.markRequested(it) }
                 mediaPermissionLauncher.launch(permissions.toTypedArray())
             } else {
+                permLog.markRequested(Manifest.permission.READ_EXTERNAL_STORAGE)
                 mediaPermissionLauncher.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
-            }
-            "Notifications" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                notificationPermissionLauncher.launch(
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS)
-                )
-            } else {
-                onPermissionStepFinished()
             }
             "Battery" -> launchBatteryOptimization()
             "Accessibility" -> launchAccessibilitySettings()
@@ -297,6 +451,19 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(
             this,
             "Allow Kraken Dive Photo to display over other apps",
+            Toast.LENGTH_LONG
+        ).show()
+        systemSettingsLauncher.launch(intent)
+    }
+
+    private fun openAppDetailsSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            "package:$packageName".toUri()
+        )
+        Toast.makeText(
+            this,
+            "Grant the missing permission, then tap back to return",
             Toast.LENGTH_LONG
         ).show()
         systemSettingsLauncher.launch(intent)
@@ -373,5 +540,4 @@ class MainActivity : ComponentActivity() {
         }
         startService(intent)
     }
-
 }
