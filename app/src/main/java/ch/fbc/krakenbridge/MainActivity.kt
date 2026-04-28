@@ -144,7 +144,12 @@ class MainActivity : ComponentActivity() {
                         AppScreen.Permissions -> PermissionScreen(
                             rows = buildPermissionRows(),
                             onContinue = { startPermissionWalkthrough() },
-                            onOpenAppSettings = { openAppDetailsSettings() }
+                            onOpenAppSettings = { openAppDetailsSettings() },
+                            onBack = {
+                                walkthroughActive = false
+                                lastWalkthroughStep = null
+                                currentScreen = AppScreen.Features
+                            }
                         )
                         AppScreen.Main -> MainScreen(
                             features = features,
