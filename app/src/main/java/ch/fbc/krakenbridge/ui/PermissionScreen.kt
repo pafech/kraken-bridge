@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -18,38 +19,30 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-data class PermissionGroupState(
+/**
+ * One row in the permission walkthrough.
+ *
+ * - [isGranted] — green check, no further action needed.
+ * - [needsSettings] — the system can no longer be re-prompted (permanently
+ *   denied, or partial media access). Row gets a "Tap to open Settings" link
+ *   and the user must grant from the system app-info screen.
+ * - [hint] — extra one-line hint shown under the reason (e.g. "Pick 'Allow
+ *   all' so dive photos appear" before the user has chosen).
+ */
+data class PermissionRowState(
     val name: String,
     val reason: String,
-    val isGranted: Boolean
+    val isGranted: Boolean,
+    val needsSettings: Boolean = false,
+    val hint: String? = null
 )
 
 @Composable
 fun PermissionScreen(
-    groups: List<PermissionGroupState>,
-    batteryOptimizationExempt: Boolean,
-    accessibilityEnabled: Boolean,
-    displayOverlayGranted: Boolean,
-    onContinue: () -> Unit
+    rows: List<PermissionRowState>,
+    onContinue: () -> Unit,
+    onOpenAppSettings: () -> Unit
 ) {
-    val rows = groups + listOf(
-        PermissionGroupState(
-            name = "Battery",
-            reason = "Keep the BLE connection alive during your dive",
-            isGranted = batteryOptimizationExempt
-        ),
-        PermissionGroupState(
-            name = "Accessibility",
-            reason = "Control camera apps via housing buttons",
-            isGranted = accessibilityEnabled
-        ),
-        PermissionGroupState(
-            name = "Display",
-            reason = "Keep screen reachable underwater without lockscreen",
-            isGranted = displayOverlayGranted
-        )
-    )
-
     Box(modifier = Modifier.fillMaxSize()) {
         WaveBackground()
         Column(
@@ -59,8 +52,6 @@ fun PermissionScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Title — same size and placement as MainScreen so the screens
-            // feel like one app, not two.
             Spacer(modifier = Modifier.height(32.dp))
             Text(
                 text = "Kraken Dive Photo",
@@ -71,7 +62,6 @@ fun PermissionScreen(
 
             Spacer(modifier = Modifier.height(36.dp))
 
-            // Subtitle: what this screen is about.
             Text(
                 text = "App Permissions",
                 fontSize = 22.sp,
@@ -98,11 +88,7 @@ fun PermissionScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 rows.forEachIndexed { index, row ->
-                    PermissionRow(
-                        name = row.name,
-                        reason = row.reason,
-                        isGranted = row.isGranted
-                    )
+                    PermissionRow(row = row, onOpenAppSettings = onOpenAppSettings)
                     if (index < rows.lastIndex) {
                         Spacer(modifier = Modifier.height(20.dp))
                     }
@@ -110,8 +96,7 @@ fun PermissionScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
-            // Round Allow CTA — matches the hero-circle language from
-            // MainScreen at a smaller scale.
+            // Round Allow CTA — same hero language as MainScreen.
             Box(
                 modifier = Modifier
                     .size(88.dp)
@@ -145,27 +130,35 @@ fun PermissionScreen(
 
 @Composable
 private fun PermissionRow(
-    name: String,
-    reason: String,
-    isGranted: Boolean
+    row: PermissionRowState,
+    onOpenAppSettings: () -> Unit
 ) {
+    val rowModifier = if (row.needsSettings) {
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onOpenAppSettings)
+    } else {
+        Modifier.fillMaxWidth()
+    }
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = rowModifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
             modifier = Modifier.size(36.dp),
             shape = CircleShape,
-            color = if (isGranted)
-                KrakenGreen.copy(alpha = 0.20f)
-            else
-                MaterialTheme.colorScheme.surface
+            color = when {
+                row.isGranted -> KrakenGreen.copy(alpha = 0.20f)
+                row.needsSettings -> KrakenAmber.copy(alpha = 0.25f)
+                else -> MaterialTheme.colorScheme.surface
+            }
         ) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                if (isGranted) {
+                if (row.isGranted) {
                     Icon(
                         imageVector = CheckIcon,
                         contentDescription = null,
@@ -176,7 +169,10 @@ private fun PermissionRow(
                     Surface(
                         modifier = Modifier.size(8.dp),
                         shape = CircleShape,
-                        color = OceanTextMuted.copy(alpha = 0.6f)
+                        color = if (row.needsSettings)
+                            KrakenAmber
+                        else
+                            OceanTextMuted.copy(alpha = 0.6f)
                     ) {}
                 }
             }
@@ -186,17 +182,36 @@ private fun PermissionRow(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = name,
+                text = row.name,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = reason,
+                text = row.reason,
                 fontSize = 14.sp,
                 color = OceanTextMuted,
                 lineHeight = 18.sp
             )
+            if (row.hint != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = row.hint,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = KrakenAmber,
+                    lineHeight = 17.sp
+                )
+            }
+            if (row.needsSettings) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Tap to open Settings",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }

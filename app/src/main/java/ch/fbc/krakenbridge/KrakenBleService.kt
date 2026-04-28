@@ -15,6 +15,7 @@ import android.os.*
 import android.provider.MediaStore
 import android.util.Log
 import android.view.KeyEvent
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
@@ -89,6 +90,8 @@ class KrakenBleService : Service() {
     @Volatile private var scanning = false
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var prefs: SharedPreferences
+    private lateinit var featureRepo: FeatureRepository
+    @Volatile private var features: Features = Features.CameraOnly
     
     // Wake lock to keep device awake while connected
     private var wakeLock: PowerManager.WakeLock? = null
@@ -295,6 +298,7 @@ class KrakenBleService : Service() {
         bluetoothAdapter = bluetoothManager.adapter
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        featureRepo = FeatureRepository(this)
         overlayManager = KrakenScreenOverlayManager(this)
 
         val screenFilter = IntentFilter().apply {
@@ -317,12 +321,16 @@ class KrakenBleService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Re-read the user's feature selection on each start so toggles taken
+        // between sessions take effect on the next connect.
+        features = featureRepo.load()
+
         when (intent?.action) {
             ACTION_CONNECT -> {
                 // User-initiated: reset state, scan for any Kraken device
                 resetState()
                 startForeground(NOTIFICATION_ID, createNotification("Connecting..."))
-                overlayManager.start()
+                if (features.diveMode) overlayManager.start()
                 startScan()
             }
             ACTION_DISCONNECT -> {
@@ -335,7 +343,7 @@ class KrakenBleService : Service() {
                 // button, swipe from Recents) clear the persisted MAC, so this path
                 // only triggers after an unintended kill.
                 startForeground(NOTIFICATION_ID, createNotification("Reconnecting..."))
-                overlayManager.start()
+                if (features.diveMode) overlayManager.start()
                 reconnectToPersistedDevice()
             }
         }
@@ -608,8 +616,18 @@ class KrakenBleService : Service() {
                 Log.i(TAG, "Minus pressed -> focus FARTHER")
             }
             BTN_BACK_PRESS -> {
-                // Back = switch to gallery mode
-                toggleGalleryMode()
+                if (features.gallery) {
+                    toggleGalleryMode()
+                } else {
+                    Log.i(TAG, "Back pressed -> gallery feature disabled, ignoring")
+                    handler.post {
+                        Toast.makeText(
+                            this,
+                            "Gallery is disabled — enable it in app settings",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
             }
             BTN_FN_PRESS -> {
                 // Fn = toggle between photo and video mode
