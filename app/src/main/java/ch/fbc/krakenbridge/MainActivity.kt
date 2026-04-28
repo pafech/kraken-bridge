@@ -49,6 +49,13 @@ class MainActivity : ComponentActivity() {
     private var walkthroughActive = false
     private var lastWalkthroughStep: String? = null
 
+    // Runtime permissions the user has declined enough times that Android now
+    // silently no-ops launch() instead of showing the dialog. Without this set
+    // the Allow button would do nothing visible after a couple of denials.
+    // Populated from launcher callbacks where shouldShowRequestPermissionRationale
+    // disambiguates "never asked" from "permanently denied".
+    private val permanentlyDeniedPermissions = mutableSetOf<String>()
+
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             intent?.let {
@@ -60,19 +67,31 @@ class MainActivity : ComponentActivity() {
 
     private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { onPermissionStepFinished() }
+    ) { results ->
+        recordPermissionResults(results)
+        onPermissionStepFinished()
+    }
 
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { onPermissionStepFinished() }
+    ) { results ->
+        recordPermissionResults(results)
+        onPermissionStepFinished()
+    }
 
     private val mediaPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { onPermissionStepFinished() }
+    ) { results ->
+        recordPermissionResults(results)
+        onPermissionStepFinished()
+    }
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { onPermissionStepFinished() }
+    ) { results ->
+        recordPermissionResults(results)
+        onPermissionStepFinished()
+    }
 
     private val systemSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -202,10 +221,30 @@ class MainActivity : ComponentActivity() {
         allPermissionsGranted = bluetoothGranted && locationGranted &&
             mediaGranted && notificationsGranted && batteryOptimizationExempt &&
             accessibilityEnabled && displayOverlayGranted
+
+        // Permissions granted from App Info should no longer be flagged.
+        permanentlyDeniedPermissions.removeAll { isGranted(it) }
     }
 
     private fun isGranted(permission: String): Boolean =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Inside a launcher callback, shouldShowRequestPermissionRationale == false
+     * after a denial means the system will no longer surface the dialog (the
+     * "permanently denied" state). Outside of a callback the same return value
+     * is ambiguous with "never asked", which is why we only update this set
+     * here.
+     */
+    private fun recordPermissionResults(results: Map<String, Boolean>) {
+        for ((perm, granted) in results) {
+            if (granted) {
+                permanentlyDeniedPermissions.remove(perm)
+            } else if (!shouldShowRequestPermissionRationale(perm)) {
+                permanentlyDeniedPermissions.add(perm)
+            }
+        }
+    }
 
     private fun startPermissionWalkthrough() {
         walkthroughActive = true
@@ -246,15 +285,18 @@ class MainActivity : ComponentActivity() {
     private fun runWalkthroughStep(step: String) {
         when (step) {
             "Bluetooth" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                bluetoothPermissionLauncher.launch(
-                    arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+                val perms = arrayOf(
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.BLUETOOTH_CONNECT
                 )
+                launchOrOpenAppInfo(perms) { bluetoothPermissionLauncher.launch(perms) }
             } else {
                 onPermissionStepFinished()
             }
-            "Location" -> locationPermissionLauncher.launch(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-            )
+            "Location" -> {
+                val perms = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+                launchOrOpenAppInfo(perms) { locationPermissionLauncher.launch(perms) }
+            }
             "Media" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val permissions = mutableListOf(
                     Manifest.permission.READ_MEDIA_IMAGES,
@@ -263,14 +305,15 @@ class MainActivity : ComponentActivity() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     permissions.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
                 }
-                mediaPermissionLauncher.launch(permissions.toTypedArray())
+                val perms = permissions.toTypedArray()
+                launchOrOpenAppInfo(perms) { mediaPermissionLauncher.launch(perms) }
             } else {
-                mediaPermissionLauncher.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
+                val perms = arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+                launchOrOpenAppInfo(perms) { mediaPermissionLauncher.launch(perms) }
             }
             "Notifications" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                notificationPermissionLauncher.launch(
-                    arrayOf(Manifest.permission.POST_NOTIFICATIONS)
-                )
+                val perms = arrayOf(Manifest.permission.POST_NOTIFICATIONS)
+                launchOrOpenAppInfo(perms) { notificationPermissionLauncher.launch(perms) }
             } else {
                 onPermissionStepFinished()
             }
@@ -278,6 +321,34 @@ class MainActivity : ComponentActivity() {
             "Accessibility" -> launchAccessibilitySettings()
             "Display" -> launchOverlayPermission()
         }
+    }
+
+    /**
+     * Either request the runtime permissions normally, or — if any of them are
+     * permanently denied — drop the user into App Info so they can grant
+     * manually. Without this fallback the system silently no-ops launch() once
+     * a permission has been declined twice, leaving the Allow button visibly
+     * unresponsive.
+     */
+    private fun launchOrOpenAppInfo(perms: Array<String>, launch: () -> Unit) {
+        if (perms.any { it in permanentlyDeniedPermissions }) {
+            openAppDetailsSettings()
+        } else {
+            launch()
+        }
+    }
+
+    private fun openAppDetailsSettings() {
+        Toast.makeText(
+            this,
+            "Grant the permission in App Info, then return",
+            Toast.LENGTH_LONG
+        ).show()
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            "package:$packageName".toUri()
+        )
+        systemSettingsLauncher.launch(intent)
     }
 
     /**
