@@ -1,19 +1,14 @@
 package ch.fbc.krakenbridge.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -98,45 +93,17 @@ fun FeatureSelectionScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
-            Box(
-                modifier = Modifier
-                    .size(88.dp)
-                    .shadow(elevation = 10.dp, shape = CircleShape)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary)
-                    .clickable {
-                        onContinue(Features(gallery = gallery, diveMode = diveMode))
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = CheckIcon,
-                    contentDescription = "Continue",
-                    tint = Color.White,
-                    modifier = Modifier.size(44.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = "Continue",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onBackground
+            ActionRow(
+                primaryLabel = "Continue",
+                primaryIcon = CheckIcon,
+                onPrimary = {
+                    onContinue(Features(gallery = gallery, diveMode = diveMode))
+                },
+                secondaryLabel = if (onCancel != null) "Back" else null,
+                onSecondary = onCancel
             )
 
-            if (onCancel != null) {
-                Spacer(modifier = Modifier.height(8.dp))
-                TextButton(onClick = onCancel) {
-                    Text(
-                        text = "Cancel",
-                        color = OceanTextMuted
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(28.dp))
         }
     }
 }
