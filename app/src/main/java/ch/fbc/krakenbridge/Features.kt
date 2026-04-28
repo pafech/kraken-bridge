@@ -64,6 +64,18 @@ class PermissionRequestLog(context: Context) {
     fun wasRequested(permission: String): Boolean =
         prefs.getBoolean(permission, false)
 
+    /**
+     * Forget that a permission was ever requested. Used when we proactively
+     * revoke a permission (via [Context.revokeSelfPermissionsOnKill]) so the
+     * next request goes through a fresh system dialog instead of tripping
+     * the "permanently denied" heuristic.
+     */
+    fun clear(permissions: Collection<String>) {
+        prefs.edit {
+            permissions.forEach { remove(it) }
+        }
+    }
+
     companion object {
         private const val PREFS_NAME = "kraken_permission_log"
     }
