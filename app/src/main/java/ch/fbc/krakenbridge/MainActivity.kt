@@ -17,8 +17,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
@@ -33,12 +36,14 @@ import ch.fbc.krakenbridge.ui.PermissionScreen
 class MainActivity : ComponentActivity() {
 
     private enum class AppScreen { Features, Permissions, Main }
+    private enum class RevokePrompt { Gallery, DiveMode }
 
     private lateinit var featureRepo: FeatureRepository
     private lateinit var permLog: PermissionRequestLog
 
     private var currentScreen by mutableStateOf(AppScreen.Features)
     private var features by mutableStateOf(Features.CameraOnly)
+    private var revokePrompts by mutableStateOf<List<RevokePrompt>>(emptyList())
 
     private var connectionStatus by mutableStateOf("disconnected")
     private var statusMessage by mutableStateOf("")
@@ -122,6 +127,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    revokePrompts.firstOrNull()?.let { prompt -> RevokePromptDialog(prompt) }
                     when (currentScreen) {
                         AppScreen.Features -> FeatureSelectionScreen(
                             initial = features,
@@ -200,17 +206,23 @@ class MainActivity : ComponentActivity() {
     /**
      * Clean up permissions when the user disables an optional feature.
      *
-     * Runtime permissions (Media): we queue [revokeSelfPermissionsOnKill] —
-     * Android revokes them when our process next dies. We also clear the
-     * request log so the next re-enable triggers a fresh system dialog rather
-     * than our permanently-denied heuristic.
+     * Runtime perms (Media, via Gallery): [revokeSelfPermissionsOnKill] queues
+     * the OS-level revocation, but Android only applies it on a "non-disruptive"
+     * process death — which can be hours away. To make the revocation actually
+     * happen on user demand, we surface a dialog offering an immediate restart
+     * (Process.killProcess), and Android then revokes on the next launch.
      *
-     * Special access (SYSTEM_ALERT_WINDOW): no programmatic revocation API
-     * exists. Surface a transparent hint with a shortcut to system settings.
+     * Special access (SYSTEM_ALERT_WINDOW, via Dive Mode): no programmatic
+     * revocation API exists. The dialog deep-links to Manage Overlay Permission.
+     *
+     * "Later" in either dialog dismisses without further action — the queue is
+     * still pending on the OS side for Gallery, and the overlay perm stays
+     * granted until the user comes back through settings.
      */
     private fun handleFeatureToggleOff(previous: Features, next: Features) {
         val galleryOff = previous.gallery && !next.gallery
         val diveModeOff = previous.diveMode && !next.diveMode
+        val queued = mutableListOf<RevokePrompt>()
 
         if (galleryOff && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val mediaPerms = buildList {
@@ -222,26 +234,62 @@ class MainActivity : ComponentActivity() {
             }
             try {
                 revokeSelfPermissionsOnKill(mediaPerms)
-                permLog.clear(mediaPerms)
-                Toast.makeText(
-                    this,
-                    "Photo access will be revoked when the app next restarts",
-                    Toast.LENGTH_LONG
-                ).show()
+                queued += RevokePrompt.Gallery
             } catch (e: Exception) {
-                // Defensive — should not fail on supported APIs, but the
-                // call is documented as "best effort".
                 android.util.Log.w("MainActivity", "Permission revocation failed: ${e.message}")
             }
         }
 
         if (diveModeOff && Settings.canDrawOverlays(this)) {
-            Toast.makeText(
-                this,
-                "Display Overlay stays granted at the system level — revoke manually in app settings if you want it gone",
-                Toast.LENGTH_LONG
-            ).show()
+            queued += RevokePrompt.DiveMode
         }
+
+        revokePrompts = queued
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun RevokePromptDialog(prompt: RevokePrompt) {
+        val title: String
+        val message: String
+        val confirmLabel: String
+        val onConfirm: () -> Unit
+        when (prompt) {
+            RevokePrompt.Gallery -> {
+                title = "Revoke photo access?"
+                message = "Gallery is disabled. Restart Kraken now to revoke the Photos & Videos permission. You can grant it again later if you re-enable Gallery."
+                confirmLabel = "Restart now"
+                onConfirm = {
+                    finishAffinity()
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                }
+            }
+            RevokePrompt.DiveMode -> {
+                title = "Revoke Display Overlay?"
+                message = "Dive Mode is disabled. The Display Overlay permission stays granted until you remove it in system settings."
+                confirmLabel = "Open settings"
+                onConfirm = {
+                    revokePrompts = revokePrompts.drop(1)
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        "package:$packageName".toUri()
+                    )
+                    startActivity(intent)
+                }
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { revokePrompts = revokePrompts.drop(1) },
+            title = { Text(title) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = onConfirm) { Text(confirmLabel) }
+            },
+            dismissButton = {
+                TextButton(onClick = { revokePrompts = revokePrompts.drop(1) }) {
+                    Text("Later")
+                }
+            }
+        )
     }
 
     private fun refreshPermissionState() {
