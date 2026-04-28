@@ -126,6 +126,7 @@ class MainActivity : ComponentActivity() {
                         AppScreen.Features -> FeatureSelectionScreen(
                             initial = features,
                             onContinue = { selected ->
+                                handleFeatureToggleOff(previous = features, next = selected)
                                 features = selected
                                 featureRepo.save(selected)
                                 walkthroughActive = false
@@ -195,6 +196,53 @@ class MainActivity : ComponentActivity() {
 
     private fun decideScreenAfterConfig(): AppScreen =
         if (allRequiredPermissionsGranted()) AppScreen.Main else AppScreen.Permissions
+
+    /**
+     * Clean up permissions when the user disables an optional feature.
+     *
+     * Runtime permissions (Media): we queue [revokeSelfPermissionsOnKill] —
+     * Android revokes them when our process next dies. We also clear the
+     * request log so the next re-enable triggers a fresh system dialog rather
+     * than our permanently-denied heuristic.
+     *
+     * Special access (SYSTEM_ALERT_WINDOW): no programmatic revocation API
+     * exists. Surface a transparent hint with a shortcut to system settings.
+     */
+    private fun handleFeatureToggleOff(previous: Features, next: Features) {
+        val galleryOff = previous.gallery && !next.gallery
+        val diveModeOff = previous.diveMode && !next.diveMode
+
+        if (galleryOff && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val mediaPerms = buildList {
+                add(Manifest.permission.READ_MEDIA_IMAGES)
+                add(Manifest.permission.READ_MEDIA_VIDEO)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+                }
+            }
+            try {
+                revokeSelfPermissionsOnKill(mediaPerms)
+                permLog.clear(mediaPerms)
+                Toast.makeText(
+                    this,
+                    "Photo access will be revoked when the app next restarts",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (e: Exception) {
+                // Defensive — should not fail on supported APIs, but the
+                // call is documented as "best effort".
+                android.util.Log.w("MainActivity", "Permission revocation failed: ${e.message}")
+            }
+        }
+
+        if (diveModeOff && Settings.canDrawOverlays(this)) {
+            Toast.makeText(
+                this,
+                "Display Overlay stays granted at the system level — revoke manually in app settings if you want it gone",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     private fun refreshPermissionState() {
         bluetoothGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
