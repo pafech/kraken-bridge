@@ -38,32 +38,10 @@ class ButtonSteps {
     fun pressOk() = simulateAndWait(KrakenBleService.BTN_OK_PRESS, 2500)
 
     // ── Then – BLE service state assertions ───────────────────────────────────
-    // All assertions guard against a null service (CI without BLE hardware) by
-    // returning early. On a real device the service is running and assertions fire.
-
-    @Then("the BLE service is in video mode")
-    fun assertVideoMode() {
-        val s = service ?: return
-        check(s.testIsVideoMode) { "Expected video mode but service is in photo mode" }
-    }
-
-    @Then("the BLE service is in photo mode")
-    fun assertPhotoMode() {
-        val s = service ?: return
-        check(!s.testIsVideoMode) { "Expected photo mode but service is in video mode" }
-    }
-
-    @Then("the BLE service is in gallery mode")
-    fun assertGalleryMode() {
-        val s = service ?: return
-        check(s.testIsGalleryMode) { "Expected gallery mode but service is in camera mode" }
-    }
-
-    @Then("the BLE service is in camera mode")
-    fun assertCameraMode() {
-        val s = service ?: return
-        check(!s.testIsGalleryMode) { "Expected camera mode but service is in gallery mode" }
-    }
+    // "the BLE service is in {photo,video,gallery,camera} mode" is owned by
+    // CommonSteps. Cucumber matches step text regardless of Given/When/Then
+    // keyword, so the @Given there also serves @Then usage in feature files.
+    // Cucumber 7.18+ rejects duplicate step definitions strictly (tolerated in 7.14).
 
     @Then("the camera-open flag is set")
     fun assertCameraOpen() {

@@ -14,11 +14,24 @@ adb shell settings put secure enabled_accessibility_services \
 adb shell settings put secure accessibility_enabled 1
 sleep 2
 
-# Run Cucumber scenarios – exclude device-only and manual tags
+# Run Cucumber scenarios – exclude device-only and manual tags.
+# Important: pass the entire `am instrument` invocation as ONE single-quoted
+# string. `adb shell` does not preserve client-side quoting — args are
+# concatenated and re-tokenised by the device shell, which would split
+# `not @device-only and not @manual` into bare tokens and trip am's parser
+# (manifests as `Error: Invalid userId -2`). The single-quoted form keeps
+# the quoting intact for the device-side shell.
 set +e
-adb shell am instrument -w \
+# `optionsAnnotationPackage` tells cucumber-android where to find the
+# @CucumberOptions class (CucumberRunner lives in `ch.fbc.krakenbridge.bdd`,
+# not the testApplicationId package `ch.fbc.krakenbridge.test`). The Gradle
+# `testInstrumentationRunnerArguments` only flow through the
+# `connectedDebugAndroidTest` task, not direct `am instrument`, so we
+# duplicate the argument here.
+adb shell "am instrument -w \
   -e tags 'not @device-only and not @manual' \
-  ch.fbc.krakenbridge.test/io.cucumber.android.runner.CucumberAndroidJUnitRunner \
+  -e optionsAnnotationPackage ch.fbc.krakenbridge.bdd \
+  ch.fbc.krakenbridge.test/ch.fbc.krakenbridge.bdd.CucumberRunner" \
   | tee /tmp/bdd-output.txt
 # `$?` after a pipe is the exit code of the last pipe member (tee), which
 # always succeeds. PIPESTATUS[0] is what we actually care about.
