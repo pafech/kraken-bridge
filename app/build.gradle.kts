@@ -20,8 +20,12 @@ android {
 
         // Cucumber-Android discovers features from assets/features/ and step definitions
         // by scanning the test APK. Tags filter which scenarios run in CI vs. on device.
-        testInstrumentationRunner = "io.cucumber.android.runner.CucumberAndroidJUnitRunner"
+        // CucumberRunner is annotated with @CucumberOptions; optionsAnnotationPackage points
+        // the runner at the package that contains it (cucumber-android otherwise scans only
+        // the testApplicationId package, which is `ch.fbc.krakenbridge.test`).
+        testInstrumentationRunner = "ch.fbc.krakenbridge.bdd.CucumberRunner"
         testInstrumentationRunnerArguments["tags"] = "not @device-only and not @manual"
+        testInstrumentationRunnerArguments["optionsAnnotationPackage"] = "ch.fbc.krakenbridge.bdd"
     }
 
     testOptions {

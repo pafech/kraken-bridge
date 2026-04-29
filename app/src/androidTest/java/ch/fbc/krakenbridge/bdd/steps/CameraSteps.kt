@@ -49,10 +49,9 @@ class CameraSteps {
         }
     }
 
-    @Given("the camera has not been opened yet this session")
-    fun assertCameraNotOpen() {
-        // No-op: cameraIsOpen starts false each session; verified by service state
-    }
+    // "the camera has not been opened yet this session" is owned by
+    // ScreenOverlaySteps.ensureCameraNotOpened, which actually asserts the
+    // service flag. Cucumber 7.18+ rejects duplicate step definitions strictly.
 
     @Given("the camera is already open")
     fun assertCameraAlreadyOpen() {
@@ -122,7 +121,10 @@ class CameraSteps {
         accessibilityService ?: return
     }
 
-    @Then("the mode-swipe gesture targets the {string} content description first")
+    // {word} matches an unquoted token. {string} would require the feature to
+    // wrap the value in double quotes, but the Examples table feeds the value
+    // raw via Scenario Outline substitution.
+    @Then("the mode-swipe gesture targets the {word} content description first")
     fun assertModeSwipeTargetsContentDesc(expectedDesc: String) {
         accessibilityService ?: return
         check(expectedDesc in listOf("Video", "Photo", "Camera")) {
