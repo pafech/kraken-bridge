@@ -24,6 +24,7 @@ Feature: Gallery opens latest media in single-item view
     When the gallery intent is constructed for the latest media
     Then the intent package is "com.google.android.apps.photos"
 
+  @device-only
   Scenario: Video media returns video MIME type
     Given a test video entry has been seeded into MediaStore
     When the latest media is queried
