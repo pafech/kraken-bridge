@@ -310,6 +310,39 @@ order of impact when the next session has a fresh head.
    that approach, or document explicitly in the feature file that the
    walkthrough is hand-tested.
 
+12. **`Thread.sleep(600)` in `clickOverflowAndFindItem`**
+    (`KrakenAccessibilityService.kt:377`) blocks the accessibility
+    thread waiting for the Photos overflow menu to animate. Replace
+    with `handler.postDelayed` + a continuation ("retry the search up
+    to N times every 100 ms"), or observe `WindowContentChanged`
+    events. While it sleeps, no further accessibility events for this
+    service are processed.
+
+13. **`onDescriptorWrite` failure leaves the service in a half-ready
+    state** (`KrakenBleService.kt:265-272`). On CCCD failure the code
+    broadcasts `error`, but the GATT stays connected, the connection
+    monitor keeps running, and the foreground notification keeps
+    displaying its previous text. The diver has no working buttons but
+    the UI claims OK. Fix: on failure, force `gatt.disconnect()` so the
+    standard reconnect path runs.
+
+14. **`MainActivity` only receives status broadcasts while resumed.**
+    The `statusReceiver` registers in `onResume` and unregisters in
+    `onPause`. While the diver is in Camera/Photos, every state
+    transition the BLE service emits is missed. Returning to the app
+    can therefore show a stale "Connected" / "Reconnecting…" string.
+    Fix: on `onResume`, query the service for current state via
+    bound-service binder (or persisted last-status) instead of waiting
+    for the next broadcast.
+
+15. **Button-event dedup state survives `resetState()` without a
+    synchronized block** (`KrakenBleService.kt:374-375` writes
+    `lastButtonCode` / `lastButtonTime` outside the `synchronized(this)`
+    used by `handleButtonEvent`). Low risk in practice — `resetState`
+    runs on the main thread between connections — but the guard is
+    inconsistent. Either move the reset inside `synchronized(this)` or
+    promote the two fields to `@Volatile` and document the invariant.
+
 ### Low impact (polish, defer until you're touching the area)
 
 9. **`gradle.properties` carries six deprecated AGP flags.**
