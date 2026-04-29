@@ -45,33 +45,25 @@ private enum class ConnectionPhase { Idle, Busy, Ready }
 
 @Composable
 fun MainScreen(
-    features: ch.fbc.krakenbridge.Features,
     status: String,
     message: String,
-    showHelpDialog: Boolean,
     bluetoothEnabled: Boolean,
     airplaneModeOn: Boolean,
+    cameraReady: Boolean,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onToggleBluetooth: () -> Unit,
-    onToggleAirplaneMode: () -> Unit,
-    onShowHelp: () -> Unit,
-    onDismissHelp: () -> Unit,
-    onOpenSettings: () -> Unit
+    onToggleAirplaneMode: () -> Unit
 ) {
-    if (showHelpDialog) {
-        HelpDialog(features = features, onDismiss = onDismissHelp)
-    }
     val phase = when (status) {
         "scanning", "connecting", "reconnecting" -> ConnectionPhase.Busy
         "connected", "ready" -> ConnectionPhase.Ready
         else -> ConnectionPhase.Idle
     }
+    val readyToConnect = cameraReady && bluetoothEnabled
     var btFlashTrigger by remember { mutableStateOf(0) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        WaveBackground()
-
         // Top — app identity. Status bar inset + extra clearance for the
         // front-facing camera punch-hole.
         Text(
@@ -85,117 +77,73 @@ fun MainScreen(
                 .padding(top = 32.dp)
         )
 
-        // Settings gear — re-opens the FeatureSelectionScreen so the user
-        // can toggle Gallery / Dive Mode without reinstalling.
-        IconButton(
-            onClick = onOpenSettings,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .statusBarsPadding()
-                .padding(top = 24.dp, end = 12.dp)
-        ) {
-            Icon(
-                imageVector = SettingsIcon,
-                contentDescription = "Settings",
-                tint = OceanTextMuted,
-                modifier = Modifier.size(28.dp)
-            )
-        }
-
-        // Centre — the hero. Big circle anchors the screen visually and
-        // physically. Tap = action (connect / cancel). State word and
-        // info sit directly below in descending visual weight.
-        Column(
+        // The hero circle anchors at the exact screen vertical centre so it
+        // lines up with the edge handles (also CenterStart/CenterEnd). Chips
+        // and status text are placed via fixed offsets relative to that
+        // anchor — so phase changes and message length cannot drift the
+        // circle off centre.
+        //
+        // Offsets math (HeroCircle box is 260dp tall, chip 52dp, status 120dp):
+        //   chip row centre   = -130 (top of HeroCircle) - 20 (gap) - 26 (chip half) = -176dp
+        //   status box centre = +130 (bottom of HeroCircle) + 28 (gap) + 60 (box half) = +218dp
+        Row(
             modifier = Modifier
                 .align(Alignment.Center)
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .offset(y = (-176).dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                StatusChip(
-                    icon = if (bluetoothEnabled) BluetoothIcon else BluetoothDisabledIcon,
-                    isOk = bluetoothEnabled,
-                    contentDescription = if (bluetoothEnabled) "Bluetooth on" else "Bluetooth off",
-                    flashKey = btFlashTrigger,
-                    onClick = onToggleBluetooth
-                )
-                StatusChip(
-                    icon = if (airplaneModeOn) AirplaneActiveIcon else AirplaneInactiveIcon,
-                    isOk = airplaneModeOn,
-                    contentDescription = if (airplaneModeOn) "Airplane mode on" else "Airplane mode off",
-                    onClick = onToggleAirplaneMode
-                )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            HeroCircle(
-                phase = phase,
-                enabled = bluetoothEnabled,
-                onTap = {
-                    when {
-                        !bluetoothEnabled -> btFlashTrigger++
-                        phase == ConnectionPhase.Idle -> onConnect()
-                        else -> onDisconnect()
-                    }
-                }
+            StatusChip(
+                icon = if (bluetoothEnabled) BluetoothIcon else BluetoothDisabledIcon,
+                isOk = bluetoothEnabled,
+                contentDescription = if (bluetoothEnabled) "Bluetooth on" else "Bluetooth off",
+                flashKey = btFlashTrigger,
+                onClick = onToggleBluetooth
             )
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            // Fixed-height slot keeps the centered Column's total height
-            // constant across phases — otherwise the Ready state's 3-line
-            // sub-info pushes the hero circle visibly upward.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = status.replaceFirstChar { it.uppercase() },
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = subInfo(phase, status, message),
-                        fontSize = 14.sp,
-                        color = OceanTextMuted,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 20.sp
-                    )
-                }
-            }
+            StatusChip(
+                icon = if (airplaneModeOn) AirplaneActiveIcon else AirplaneInactiveIcon,
+                isOk = airplaneModeOn,
+                contentDescription = if (airplaneModeOn) "Airplane mode on" else "Airplane mode off",
+                onClick = onToggleAirplaneMode
+            )
         }
 
-        // Bottom — help link. navigationBarsPadding lifts it clear of the
-        // gesture bar; +16dp gives visual breathing room above that.
-        Column(
+        HeroCircle(
+            phase = phase,
+            enabled = readyToConnect,
+            onTap = {
+                when {
+                    !cameraReady -> Unit
+                    !bluetoothEnabled -> btFlashTrigger++
+                    phase == ConnectionPhase.Idle -> onConnect()
+                    else -> onDisconnect()
+                }
+            },
+            modifier = Modifier.align(Alignment.Center)
+        )
+
+        Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
+                .align(Alignment.Center)
+                .offset(y = 218.dp)
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .height(120.dp)
+                .padding(horizontal = 24.dp),
+            contentAlignment = Alignment.TopCenter
         ) {
-            TextButton(onClick = onShowHelp) {
-                Icon(
-                    imageVector = ListIcon,
-                    contentDescription = null,
-                    modifier = Modifier.size(28.dp),
-                    tint = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(modifier = Modifier.width(10.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Button Mapping",
+                    text = status.replaceFirstChar { it.uppercase() },
                     fontSize = 28.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = subInfo(phase, status, message, cameraReady),
+                    fontSize = 14.sp,
+                    color = OceanTextMuted,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp
                 )
             }
         }
@@ -204,8 +152,10 @@ fun MainScreen(
 
 // Sub-info logic: prefer service messages when they carry information
 // beyond the status word (errors, "Limited photo access…"); otherwise
-// fall back to per-phase guidance.
-private fun subInfo(phase: ConnectionPhase, status: String, message: String): String {
+// fall back to per-phase guidance. Permission gaps take precedence — the
+// connect path is unreachable until Camera-required perms are granted.
+private fun subInfo(phase: ConnectionPhase, status: String, message: String, cameraReady: Boolean): String {
+    if (!cameraReady) return "Permissions needed\nSwipe left to Settings"
     val carriesNewInfo = message.isNotBlank() &&
         !message.lowercase().startsWith(status.lowercase())
     if (carriesNewInfo) return message
@@ -220,7 +170,8 @@ private fun subInfo(phase: ConnectionPhase, status: String, message: String): St
 private fun HeroCircle(
     phase: ConnectionPhase,
     enabled: Boolean,
-    onTap: () -> Unit
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val containerColor by animateColorAsState(
         targetValue = when {
@@ -257,7 +208,7 @@ private fun HeroCircle(
     }
 
     Box(
-        modifier = Modifier.size(260.dp),
+        modifier = modifier.size(260.dp),
         contentAlignment = Alignment.Center
     ) {
         if (phase == ConnectionPhase.Busy) {
@@ -372,7 +323,7 @@ private fun StatusChip(
     flashKey: Int = 0,
     onClick: () -> Unit
 ) {
-    val tint = if (isOk) KrakenGreen else KrakenRed
+    val tint = if (isOk) KrakenGreen else KrakenAmber
     val bg = tint.copy(alpha = 0.18f)
 
     val pulse = remember { Animatable(1f) }
@@ -482,103 +433,6 @@ private val BluetoothDisabledIcon: ImageVector by lazy {
             lineToRelative(1.88f, 1.88f)
             lineTo(13f, 18.17f)
             close()
-        }
-    }.build()
-}
-
-// Inline check icon — keeps us off material-icons-extended (4+ MB).
-// Internal so PermissionScreen can reuse for its Allow CTA.
-internal val CheckIcon: ImageVector by lazy {
-    ImageVector.Builder(
-        defaultWidth = 24.dp, defaultHeight = 24.dp,
-        viewportWidth = 24f, viewportHeight = 24f
-    ).apply {
-        path(fill = SolidColor(Color.White)) {
-            moveTo(9f, 16.17f)
-            lineTo(4.83f, 12f)
-            lineTo(3.41f, 13.41f)
-            lineTo(9f, 19f)
-            lineTo(21f, 7f)
-            lineTo(19.59f, 5.59f)
-            close()
-        }
-    }.build()
-}
-
-// Inline settings gear icon (Material Symbols Outlined, centered at 12,12).
-// Keeps us off material-icons-extended (4+ MB). EvenOdd fill renders the
-// inner circle as a hole through the gear, matching the system Settings glyph.
-private val SettingsIcon: ImageVector by lazy {
-    ImageVector.Builder(
-        defaultWidth = 24.dp, defaultHeight = 24.dp,
-        viewportWidth = 24f, viewportHeight = 24f
-    ).apply {
-        path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
-            // Outer gear silhouette
-            moveTo(19.14f, 12.94f)
-            curveToRelative(0.04f, -0.3f, 0.06f, -0.61f, 0.06f, -0.94f)
-            curveToRelative(0f, -0.32f, -0.02f, -0.64f, -0.07f, -0.94f)
-            lineToRelative(2.03f, -1.58f)
-            curveToRelative(0.18f, -0.14f, 0.23f, -0.41f, 0.12f, -0.61f)
-            lineToRelative(-1.92f, -3.32f)
-            curveToRelative(-0.12f, -0.22f, -0.37f, -0.29f, -0.59f, -0.22f)
-            lineToRelative(-2.39f, 0.96f)
-            curveToRelative(-0.5f, -0.38f, -1.03f, -0.7f, -1.62f, -0.94f)
-            lineTo(14.4f, 2.81f)
-            curveToRelative(-0.04f, -0.24f, -0.24f, -0.41f, -0.48f, -0.41f)
-            horizontalLineToRelative(-3.84f)
-            curveToRelative(-0.24f, 0f, -0.43f, 0.17f, -0.47f, 0.41f)
-            lineTo(9.25f, 5.35f)
-            curveTo(8.66f, 5.59f, 8.12f, 5.92f, 7.63f, 6.29f)
-            lineTo(5.24f, 5.33f)
-            curveToRelative(-0.22f, -0.08f, -0.47f, 0f, -0.59f, 0.22f)
-            lineTo(2.74f, 8.87f)
-            curveTo(2.62f, 9.08f, 2.66f, 9.34f, 2.86f, 9.48f)
-            lineToRelative(2.03f, 1.58f)
-            curveTo(4.84f, 11.36f, 4.8f, 11.69f, 4.8f, 12f)
-            reflectiveCurveToRelative(0.02f, 0.64f, 0.07f, 0.94f)
-            lineToRelative(-2.03f, 1.58f)
-            curveToRelative(-0.18f, 0.14f, -0.23f, 0.41f, -0.12f, 0.61f)
-            lineToRelative(1.92f, 3.32f)
-            curveToRelative(0.12f, 0.22f, 0.37f, 0.29f, 0.59f, 0.22f)
-            lineToRelative(2.39f, -0.96f)
-            curveToRelative(0.5f, 0.38f, 1.03f, 0.7f, 1.62f, 0.94f)
-            lineToRelative(0.36f, 2.54f)
-            curveToRelative(0.05f, 0.24f, 0.24f, 0.41f, 0.48f, 0.41f)
-            horizontalLineToRelative(3.84f)
-            curveToRelative(0.24f, 0f, 0.44f, -0.17f, 0.47f, -0.41f)
-            lineToRelative(0.36f, -2.54f)
-            curveToRelative(0.59f, -0.24f, 1.13f, -0.56f, 1.62f, -0.94f)
-            lineToRelative(2.39f, 0.96f)
-            curveToRelative(0.22f, 0.08f, 0.47f, 0f, 0.59f, -0.22f)
-            lineToRelative(1.92f, -3.32f)
-            curveToRelative(0.12f, -0.22f, 0.07f, -0.47f, -0.12f, -0.61f)
-            lineTo(19.14f, 12.94f)
-            close()
-            // Inner circle (hole) — centered exactly at (12, 12)
-            moveTo(12f, 15.6f)
-            curveToRelative(-1.98f, 0f, -3.6f, -1.62f, -3.6f, -3.6f)
-            reflectiveCurveToRelative(1.62f, -3.6f, 3.6f, -3.6f)
-            reflectiveCurveToRelative(3.6f, 1.62f, 3.6f, 3.6f)
-            reflectiveCurveTo(13.98f, 15.6f, 12f, 15.6f)
-            close()
-        }
-    }.build()
-}
-
-// Inline list icon — keeps us off material-icons-extended (4+ MB).
-private val ListIcon: ImageVector by lazy {
-    ImageVector.Builder(
-        defaultWidth = 24.dp, defaultHeight = 24.dp,
-        viewportWidth = 24f, viewportHeight = 24f
-    ).apply {
-        path(fill = SolidColor(Color.Black)) {
-            moveTo(3f, 13f); lineTo(3f, 11f); lineTo(5f, 11f); lineTo(5f, 13f); close()
-            moveTo(3f, 17f); lineTo(3f, 15f); lineTo(5f, 15f); lineTo(5f, 17f); close()
-            moveTo(3f, 9f); lineTo(3f, 7f); lineTo(5f, 7f); lineTo(5f, 9f); close()
-            moveTo(7f, 13f); lineTo(7f, 11f); lineTo(21f, 11f); lineTo(21f, 13f); close()
-            moveTo(7f, 17f); lineTo(7f, 15f); lineTo(21f, 15f); lineTo(21f, 17f); close()
-            moveTo(7f, 7f); lineTo(21f, 7f); lineTo(21f, 9f); lineTo(7f, 9f); close()
         }
     }.build()
 }
