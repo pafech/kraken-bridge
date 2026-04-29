@@ -140,7 +140,7 @@ class KrakenBleService : Service() {
     
     // Connection monitoring
     @Volatile private var isUserDisconnect = false
-    private var lastConnectedDevice: BluetoothDevice? = null
+    @Volatile private var lastConnectedDevice: BluetoothDevice? = null
     private var reconnectAttempts = 0
     private val MAX_RECONNECT_ATTEMPTS = 5
     private val RECONNECT_BASE_DELAY_MS = 2000L
@@ -155,6 +155,15 @@ class KrakenBleService : Service() {
     private val serviceDiscoveryTimeoutRunnable = Runnable {
         Log.e(TAG, "Service discovery timed out - forcing disconnect to retry")
         bluetoothGatt?.disconnect()
+    }
+
+    // 500 ms grace before discoverServices() — some stacks reject discovery if called too early.
+    // Held as a named runnable so a disconnect during the grace window can cancel it
+    // and avoid invoking discoverServices() on a closed GATT.
+    private val serviceDiscoveryStartRunnable = Runnable {
+        val gatt = bluetoothGatt ?: return@Runnable
+        handler.postDelayed(serviceDiscoveryTimeoutRunnable, 10000)
+        gatt.discoverServices()
     }
     
     private val scanCallback = object : ScanCallback() {
@@ -192,13 +201,12 @@ class KrakenBleService : Service() {
                     reconnectAttempts = 0  // Successful connection resets backoff counter
                     startConnectionMonitoring()
                     // Discover services after connection; cancel if it takes > 10s
-                    handler.postDelayed({
-                        handler.postDelayed(serviceDiscoveryTimeoutRunnable, 10000)
-                        gatt.discoverServices()
-                    }, 500)
+                    handler.postDelayed(serviceDiscoveryStartRunnable, 500)
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.i(TAG, "Disconnected from Kraken (status=$status, userDisconnect=$isUserDisconnect)")
+                    handler.removeCallbacks(serviceDiscoveryStartRunnable)
+                    handler.removeCallbacks(serviceDiscoveryTimeoutRunnable)
                     stopConnectionMonitoring()
                     releaseConnectionWakeLock()
                     bluetoothGatt?.close()
@@ -232,23 +240,16 @@ class KrakenBleService : Service() {
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
         ) {
-            if (characteristic.uuid == BUTTON_CHAR_UUID && value.isNotEmpty()) {
-                val buttonCode = value[0].toInt() and 0xFF
-                handleButtonEvent(buttonCode)
-            }
+            extractButtonCode(characteristic, value)?.let { handleButtonEvent(it) }
         }
-        
+
         // Legacy callback for older Android versions
         @Deprecated("Deprecated in Java")
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic
         ) {
-            val value = characteristic.value
-            if (characteristic.uuid == BUTTON_CHAR_UUID && value != null && value.isNotEmpty()) {
-                val buttonCode = value[0].toInt() and 0xFF
-                handleButtonEvent(buttonCode)
-            }
+            extractButtonCode(characteristic, characteristic.value)?.let { handleButtonEvent(it) }
         }
 
         override fun onDescriptorWrite(
@@ -310,11 +311,18 @@ class KrakenBleService : Service() {
         )
         screenReceiverRegistered = true
 
-        // Restore last connected device from disk so reconnection survives process death
+        // Restore last connected device from disk so reconnection survives process death.
+        // Validate format first — getRemoteDevice() throws IllegalArgumentException on a
+        // malformed MAC, which would otherwise crash onCreate.
         val savedMac = prefs.getString(PREF_LAST_DEVICE_MAC, null)
         if (savedMac != null && lastConnectedDevice == null) {
-            lastConnectedDevice = bluetoothAdapter?.getRemoteDevice(savedMac)
-            Log.i(TAG, "Restored last connected device: $savedMac")
+            if (BluetoothAdapter.checkBluetoothAddress(savedMac)) {
+                lastConnectedDevice = bluetoothAdapter?.getRemoteDevice(savedMac)
+                Log.i(TAG, "Restored last connected device: $savedMac")
+            } else {
+                Log.w(TAG, "Stored MAC is malformed, clearing: $savedMac")
+                prefs.edit { remove(PREF_LAST_DEVICE_MAC) }
+            }
         }
 
         Log.i(TAG, "Service instance created")
@@ -531,6 +539,15 @@ class KrakenBleService : Service() {
             Log.w(TAG, "CCCD descriptor not found, notifications may not work")
             broadcastStatus("ready", "Connected (no CCCD)")
         }
+    }
+
+    private fun extractButtonCode(
+        characteristic: BluetoothGattCharacteristic,
+        value: ByteArray?
+    ): Int? {
+        if (characteristic.uuid != BUTTON_CHAR_UUID) return null
+        if (value == null || value.isEmpty()) return null
+        return value[0].toInt() and 0xFF
     }
 
     private fun handleButtonEvent(code: Int) {
