@@ -52,7 +52,7 @@ Feature: Gallery browsing and photo deletion via Kraken housing
     When the OK button is pressed
     Then the quick-delete sequence is dispatched to the accessibility service
 
-  @photos-delete
+  @photos-delete @device-only
   Scenario: Trash button is located by content description before resource ID
     Given the BLE service is in gallery mode
     And Google Photos is the foreground app
@@ -60,7 +60,7 @@ Feature: Gallery browsing and photo deletion via Kraken housing
     Then the trash button detection tries content description strategies first
     And resource ID strategies are used only as a fallback
 
-  @photos-delete
+  @photos-delete @device-only
   Scenario: Delete confirmation dialog is confirmed after trash is tapped
     Given the BLE service is in gallery mode
     And Google Photos is the foreground app

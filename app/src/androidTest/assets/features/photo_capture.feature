@@ -14,7 +14,7 @@ Feature: Photo capture via Kraken housing shutter button
     When the shutter button is pressed
     Then a tap gesture is dispatched to the shutter button area
 
-  @smoke
+  @smoke @device-only
   Scenario: First shutter press opens Google Camera when not yet open
     Given the camera has not been opened yet this session
     When the shutter button is pressed
