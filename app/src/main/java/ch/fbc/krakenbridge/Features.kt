@@ -23,9 +23,6 @@ data class Features(
 class FeatureRepository(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    /** True once the user has confirmed a selection on the FeatureSelectionScreen. */
-    fun isConfigured(): Boolean = prefs.getBoolean(KEY_CONFIGURED, false)
-
     fun load(): Features = Features(
         gallery = prefs.getBoolean(KEY_GALLERY, false),
         diveMode = prefs.getBoolean(KEY_DIVE_MODE, false)
@@ -35,7 +32,6 @@ class FeatureRepository(context: Context) {
         prefs.edit {
             putBoolean(KEY_GALLERY, features.gallery)
             putBoolean(KEY_DIVE_MODE, features.diveMode)
-            putBoolean(KEY_CONFIGURED, true)
         }
     }
 
@@ -43,7 +39,6 @@ class FeatureRepository(context: Context) {
         private const val PREFS_NAME = "kraken_features"
         private const val KEY_GALLERY = "feature_gallery"
         private const val KEY_DIVE_MODE = "feature_dive_mode"
-        private const val KEY_CONFIGURED = "configured"
     }
 }
 

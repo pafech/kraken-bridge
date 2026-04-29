@@ -19,12 +19,11 @@ val OceanText = Color(0xFFE1F5FE)
 // previous Color.Gray which was below AA on the dark surface cards.
 val OceanTextMuted = Color(0xFFB3E5FC)
 
-// Connection-phase colours used by the hero circle, pulse rings and glow.
+// Signal-colour palette for connection state and chip status. Three
+// colours, no red: blue (idle/normal), amber (busy/needs attention),
+// green (ready/ok). Disabled state uses a neutral blue-grey.
 val KrakenAmber = Color(0xFFFFC107)
 val KrakenGreen = Color(0xFF8BC34A)
-val KrakenRed = Color(0xFFEF5350)
-// Disabled hero-circle (BT off) — Material Blue-Grey 700, neutral enough
-// to read as "inactive" without clashing with the ocean palette.
 val KrakenDisabled = Color(0xFF455A64)
 
 @Composable
