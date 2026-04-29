@@ -313,20 +313,17 @@ class KrakenAccessibilityService : AccessibilityService() {
      */
     private fun getBottomActionBarItems(): List<AccessibilityNodeInfo> {
         val root = rootInActiveWindow ?: return emptyList()
-        val items = mutableListOf<AccessibilityNodeInfo>()
-        
+
         // Bottom action bar is typically in the bottom 15% of the screen
         val minY = screenHeight * 0.85f
         val maxY = screenHeight.toFloat()
-        
-        collectClickableNodesInRegion(root, 0f, screenWidth.toFloat(), minY, maxY, items)
-        
-        // Sort by X position (left to right)
-        return items.sortedBy { node ->
-            val rect = Rect()
-            node.getBoundsInScreen(rect)
-            rect.centerX()
-        }
+
+        return collectClickableNodesInRegion(root, 0f, screenWidth.toFloat(), minY, maxY)
+            .sortedBy { node ->
+                val rect = Rect()
+                node.getBoundsInScreen(rect)
+                rect.centerX()
+            }
     }
 
     /**
@@ -391,8 +388,18 @@ class KrakenAccessibilityService : AccessibilityService() {
     private fun collectClickableNodesInRegion(
         node: AccessibilityNodeInfo?,
         minX: Float, maxX: Float,
+        minY: Float, maxY: Float
+    ): List<AccessibilityNodeInfo> {
+        val result = mutableListOf<AccessibilityNodeInfo>()
+        collectInto(node, minX, maxX, minY, maxY, result)
+        return result
+    }
+
+    private fun collectInto(
+        node: AccessibilityNodeInfo?,
+        minX: Float, maxX: Float,
         minY: Float, maxY: Float,
-        result: MutableList<AccessibilityNodeInfo>
+        out: MutableList<AccessibilityNodeInfo>
     ) {
         if (node == null) return
 
@@ -401,14 +408,12 @@ class KrakenAccessibilityService : AccessibilityService() {
         val centerX = rect.exactCenterX()
         val centerY = rect.exactCenterY()
 
-        if (centerX >= minX && centerX <= maxX && centerY >= minY && centerY <= maxY) {
-            if (node.isClickable) {
-                result.add(node)
-            }
+        if (centerX in minX..maxX && centerY in minY..maxY && node.isClickable) {
+            out.add(node)
         }
 
         for (i in 0 until node.childCount) {
-            collectClickableNodesInRegion(node.getChild(i), minX, maxX, minY, maxY, result)
+            collectInto(node.getChild(i), minX, maxX, minY, maxY, out)
         }
     }
 
