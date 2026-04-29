@@ -85,7 +85,7 @@ fun FeatureSelectionScreen(
                 Spacer(modifier = Modifier.height(14.dp))
                 FeatureCard(
                     name = "Dive Mode",
-                    description = "Keep the screen on and dim it during the dive. Without this, your screen may turn off and the lockscreen may engage — you cannot unlock the phone underwater. Some banking apps refuse to run while this is enabled.",
+                    description = "Keep the screen on and dim it during the dive. Without this, your screen may turn off and the lockscreen may engage — you cannot unlock the phone underwater.",
                     isEnabled = diveMode,
                     isLocked = false,
                     onToggle = { diveMode = !diveMode }
