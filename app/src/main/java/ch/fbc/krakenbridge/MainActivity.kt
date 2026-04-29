@@ -48,6 +48,8 @@ class MainActivity : ComponentActivity() {
     private var connectionStatus by mutableStateOf("disconnected")
     private var statusMessage by mutableStateOf("")
     private var showHelpDialog by mutableStateOf(false)
+    private var airplaneModeOn by mutableStateOf(false)
+    private var bluetoothAdapterEnabled by mutableStateOf(false)
 
     // Per-permission grant state
     private var bluetoothGranted by mutableStateOf(false)
@@ -77,6 +79,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Keeps the BT/airplane status chips truthful even when the user toggles
+    // from Quick Settings (Activity stays resumed, so onResume won't refire).
+    // System broadcasts fire at the moment of state change, so the chip
+    // updates regardless of how the toggle was triggered.
+    private val diveReadinessReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_AIRPLANE_MODE_CHANGED -> {
+                    airplaneModeOn = intent.getBooleanExtra("state", false)
+                }
+                BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                    val newState = intent.getIntExtra(
+                        BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR
+                    )
+                    bluetoothAdapterEnabled = newState == BluetoothAdapter.STATE_ON
+                }
+            }
+        }
+    }
+
     private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { onPermissionStepFinished() }
@@ -96,23 +118,6 @@ class MainActivity : ComponentActivity() {
     private val systemSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { onPermissionStepFinished() }
-
-    // User accepted (or declined) the system "Turn on Bluetooth?" dialog.
-    // RESULT_OK ⇒ adapter is now enabled, start the BLE service. Anything else
-    // means the user kept Bluetooth off — we surface a hint and stay idle.
-    private val enableBluetoothLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            startBleService()
-        } else {
-            Toast.makeText(
-                this,
-                "Bluetooth is required to connect to the housing",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -163,8 +168,12 @@ class MainActivity : ComponentActivity() {
                             status = connectionStatus,
                             message = statusMessage,
                             showHelpDialog = showHelpDialog,
+                            bluetoothEnabled = bluetoothAdapterEnabled,
+                            airplaneModeOn = airplaneModeOn,
                             onConnect = { startConnection() },
                             onDisconnect = { stopConnection() },
+                            onToggleBluetooth = { openBluetoothToggle() },
+                            onToggleAirplaneMode = { openAirplaneModeSettings() },
                             onShowHelp = { showHelpDialog = true },
                             onDismissHelp = { showHelpDialog = false },
                             onOpenSettings = { currentScreen = AppScreen.Features }
@@ -172,6 +181,33 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // System broadcasts (BT adapter state, airplane mode) — protected so
+        // the EXPORTED flag is what's appropriate per Android 14 guidance.
+        // Registering in onStart (vs onResume) keeps the chips truthful even
+        // when a Quick Settings panel is dragged over the UI.
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+        }
+        ContextCompat.registerReceiver(
+            this, diveReadinessReceiver, filter, ContextCompat.RECEIVER_EXPORTED
+        )
+        // Initial sync — broadcasts only fire on transitions, so the very
+        // first read after the app comes back from stopped needs a poll.
+        refreshDiveReadiness()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        try {
+            unregisterReceiver(diveReadinessReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Receiver not registered
         }
     }
 
@@ -189,6 +225,39 @@ class MainActivity : ComponentActivity() {
         if (currentScreen == AppScreen.Permissions && allRequiredPermissionsGranted()) {
             currentScreen = AppScreen.Main
         }
+    }
+
+    private fun refreshDiveReadiness() {
+        airplaneModeOn = Settings.Global.getInt(
+            contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0
+        ) != 0
+        bluetoothAdapterEnabled =
+            (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)
+                ?.adapter?.isEnabled == true
+    }
+
+    private fun openAirplaneModeSettings() {
+        // No public API to toggle airplane mode (privileged setting since
+        // Android 4.2). ACTION_AIRPLANE_MODE_SETTINGS is the most direct
+        // deeplink we have — typically lands on Network & Internet.
+        systemSettingsLauncher.launch(Intent(Settings.ACTION_AIRPLANE_MODE_SETTINGS))
+    }
+
+    private fun openBluetoothToggle() {
+        // BT off → fire the system "Allow this app to turn on Bluetooth?"
+        // in-place dialog, no settings page jump.
+        // BT on → ACTION_BLUETOOTH_SETTINGS (canonical). Lands on Connected
+        // devices on Pixel-stock with the BT master toggle visible at the
+        // top. ACTION_WIRELESS_SETTINGS landed on the unrelated Network &
+        // Internet parent page on at least one Pixel build. There is no
+        // direct in-app disable path on Android 13+; this is the closest
+        // the platform allows.
+        val intent = if (bluetoothAdapterEnabled) {
+            Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+        } else {
+            Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+        }
+        systemSettingsLauncher.launch(intent)
     }
 
     override fun onPause() {
@@ -614,15 +683,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startConnection() {
+        // The hero circle is gated by `bluetoothAdapterEnabled` in MainScreen
+        // — a tap only reaches us when BT is already on. The BT chip handles
+        // the off-state path via openBluetoothToggle() / ACTION_REQUEST_ENABLE.
         val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
         if (adapter == null) {
             Toast.makeText(this, "This device has no Bluetooth", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (!adapter.isEnabled) {
-            // BLUETOOTH_CONNECT (API 31+) is granted at this point because the
-            // walkthrough already gated the Connect CTA on it.
-            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
             return
         }
         startBleService()

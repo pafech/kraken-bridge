@@ -1,7 +1,5 @@
 package ch.fbc.krakenbridge.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -13,21 +11,19 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
+import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -53,8 +49,12 @@ fun MainScreen(
     status: String,
     message: String,
     showHelpDialog: Boolean,
+    bluetoothEnabled: Boolean,
+    airplaneModeOn: Boolean,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
+    onToggleBluetooth: () -> Unit,
+    onToggleAirplaneMode: () -> Unit,
     onShowHelp: () -> Unit,
     onDismissHelp: () -> Unit,
     onOpenSettings: () -> Unit
@@ -67,6 +67,7 @@ fun MainScreen(
         "connected", "ready" -> ConnectionPhase.Ready
         else -> ConnectionPhase.Idle
     }
+    var btFlashTrigger by remember { mutableStateOf(0) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         WaveBackground()
@@ -110,40 +111,70 @@ fun MainScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                StatusChip(
+                    icon = if (bluetoothEnabled) BluetoothIcon else BluetoothDisabledIcon,
+                    isOk = bluetoothEnabled,
+                    contentDescription = if (bluetoothEnabled) "Bluetooth on" else "Bluetooth off",
+                    flashKey = btFlashTrigger,
+                    onClick = onToggleBluetooth
+                )
+                StatusChip(
+                    icon = if (airplaneModeOn) AirplaneActiveIcon else AirplaneInactiveIcon,
+                    isOk = airplaneModeOn,
+                    contentDescription = if (airplaneModeOn) "Airplane mode on" else "Airplane mode off",
+                    onClick = onToggleAirplaneMode
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
             HeroCircle(
                 phase = phase,
+                enabled = bluetoothEnabled,
                 onTap = {
-                    when (phase) {
-                        ConnectionPhase.Idle -> onConnect()
-                        ConnectionPhase.Busy -> onDisconnect()
-                        ConnectionPhase.Ready -> Unit
+                    when {
+                        !bluetoothEnabled -> btFlashTrigger++
+                        phase == ConnectionPhase.Idle -> onConnect()
+                        else -> onDisconnect()
                     }
                 }
             )
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            Text(
-                text = status.replaceFirstChar { it.uppercase() },
-                fontSize = 28.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = subInfo(phase, status, message),
-                fontSize = 14.sp,
-                color = OceanTextMuted,
-                textAlign = TextAlign.Center,
-                lineHeight = 20.sp
-            )
+            // Fixed-height slot keeps the centered Column's total height
+            // constant across phases — otherwise the Ready state's 3-line
+            // sub-info pushes the hero circle visibly upward.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = status.replaceFirstChar { it.uppercase() },
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = subInfo(phase, status, message),
+                        fontSize = 14.sp,
+                        color = OceanTextMuted,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 20.sp
+                    )
+                }
+            }
         }
 
-        // Bottom — secondary action (when relevant) + help link.
-        // navigationBarsPadding lifts the help link clear of the gesture
-        // bar; +16dp gives it visual breathing room above that.
+        // Bottom — help link. navigationBarsPadding lifts it clear of the
+        // gesture bar; +16dp gives visual breathing room above that.
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -152,49 +183,19 @@ fun MainScreen(
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            AnimatedVisibility(
-                visible = phase == ConnectionPhase.Ready,
-                enter = fadeIn(tween(280, delayMillis = 450)) +
-                    expandVertically(tween(280, delayMillis = 450)),
-                exit = fadeOut(tween(120)) + shrinkVertically(tween(180))
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .border(
-                                width = 1.dp,
-                                color = OceanTextMuted.copy(alpha = 0.35f),
-                                shape = CircleShape
-                            )
-                            .clickable(onClick = onDisconnect),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = BluetoothDisabledIcon,
-                            contentDescription = "Disconnect",
-                            tint = OceanTextMuted,
-                            modifier = Modifier.size(26.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-            }
-
             TextButton(onClick = onShowHelp) {
                 Icon(
                     imageVector = ListIcon,
                     contentDescription = null,
                     modifier = Modifier.size(28.dp),
-                    tint = OceanTextMuted
+                    tint = MaterialTheme.colorScheme.onBackground
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = "Button Mapping",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Medium,
-                    color = OceanTextMuted
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
         }
@@ -211,20 +212,22 @@ private fun subInfo(phase: ConnectionPhase, status: String, message: String): St
     return when (phase) {
         ConnectionPhase.Idle -> "Tap the circle to connect"
         ConnectionPhase.Busy -> "Searching for Kraken — tap to cancel"
-        ConnectionPhase.Ready -> "Press the Shutter button (red)\non the Kraken to open Camera"
+        ConnectionPhase.Ready -> "Press the Shutter button (red)\non the Kraken to open Camera\n— tap to disconnect"
     }
 }
 
 @Composable
 private fun HeroCircle(
     phase: ConnectionPhase,
+    enabled: Boolean,
     onTap: () -> Unit
 ) {
     val containerColor by animateColorAsState(
-        targetValue = when (phase) {
-            ConnectionPhase.Idle -> MaterialTheme.colorScheme.primary
-            ConnectionPhase.Busy -> KrakenAmber
-            ConnectionPhase.Ready -> KrakenGreen
+        targetValue = when {
+            !enabled -> KrakenDisabled
+            phase == ConnectionPhase.Idle -> MaterialTheme.colorScheme.primary
+            phase == ConnectionPhase.Busy -> KrakenAmber
+            else -> KrakenGreen
         },
         animationSpec = spring(
             dampingRatio = 0.9f,
@@ -247,7 +250,7 @@ private fun HeroCircle(
         ),
         label = "breathProgress"
     )
-    val circleScale = if (phase == ConnectionPhase.Idle) {
+    val circleScale = if (phase == ConnectionPhase.Idle && enabled) {
         0.96f + 0.08f * breathProgress  // 0.96 → 1.04
     } else {
         1f
@@ -271,49 +274,23 @@ private fun HeroCircle(
                 .shadow(elevation = 10.dp, shape = CircleShape)
                 .clip(CircleShape)
                 .background(containerColor)
-                .clickable(
-                    enabled = phase != ConnectionPhase.Ready,
-                    onClick = onTap
-                ),
+                .clickable(onClick = onTap),
             contentAlignment = Alignment.Center
         ) {
-            AnimatedContent(
-                targetState = phase,
-                transitionSpec = {
-                    (fadeIn(tween(260, delayMillis = 100)) +
-                        scaleIn(
-                            initialScale = 0.55f,
-                            animationSpec = spring(
-                                dampingRatio = 0.5f,
-                                stiffness = Spring.StiffnessMediumLow
-                            )
-                        )) togetherWith
-                        (fadeOut(tween(120)) +
-                            scaleOut(targetScale = 0.85f, animationSpec = tween(120)))
+            Icon(
+                imageVector = ConnectionLinkIcon,
+                contentDescription = when (phase) {
+                    ConnectionPhase.Idle -> "Connect"
+                    ConnectionPhase.Busy -> null
+                    ConnectionPhase.Ready -> "Connected — tap to disconnect"
                 },
-                label = "circleContent"
-            ) { p ->
-                when (p) {
-                    ConnectionPhase.Idle -> Icon(
-                        imageVector = BluetoothIcon,
-                        contentDescription = "Connect",
-                        tint = Color.White,
-                        modifier = Modifier.size(80.dp)
-                    )
-                    ConnectionPhase.Busy -> Icon(
-                        imageVector = BluetoothIcon,
-                        contentDescription = null,
-                        tint = Color.Black.copy(alpha = 0.85f),
-                        modifier = Modifier.size(80.dp)
-                    )
-                    ConnectionPhase.Ready -> Icon(
-                        imageVector = CheckIcon,
-                        contentDescription = "Connected",
-                        tint = Color.White,
-                        modifier = Modifier.size(96.dp)
-                    )
-                }
-            }
+                tint = if (phase == ConnectionPhase.Busy) {
+                    Color.Black.copy(alpha = 0.85f)
+                } else {
+                    Color.White
+                },
+                modifier = Modifier.size(80.dp)
+            )
         }
     }
 }
@@ -380,6 +357,50 @@ private fun PulseRings(color: Color) {
                 .size(size)
                 .alpha(alpha)
                 .border(width = 2.dp, color = color, shape = CircleShape)
+        )
+    }
+}
+
+// flashKey: incrementing it pulses the chip so a parent can redirect
+// attention — used when the user taps a disabled Connect button while
+// BT is off.
+@Composable
+private fun StatusChip(
+    icon: ImageVector,
+    isOk: Boolean,
+    contentDescription: String,
+    flashKey: Int = 0,
+    onClick: () -> Unit
+) {
+    val tint = if (isOk) KrakenGreen else KrakenRed
+    val bg = tint.copy(alpha = 0.18f)
+
+    val pulse = remember { Animatable(1f) }
+    LaunchedEffect(flashKey) {
+        if (flashKey > 0) {
+            pulse.snapTo(1f)
+            pulse.animateTo(1.25f, tween(140))
+            pulse.animateTo(1f, tween(220))
+            pulse.animateTo(1.18f, tween(140))
+            pulse.animateTo(1f, tween(220))
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .size(52.dp)
+            .scale(pulse.value)
+            .clip(CircleShape)
+            .background(bg)
+            .border(width = 1.dp, color = tint.copy(alpha = 0.55f), shape = CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(26.dp)
         )
     }
 }
@@ -558,6 +579,119 @@ private val ListIcon: ImageVector by lazy {
             moveTo(7f, 13f); lineTo(7f, 11f); lineTo(21f, 11f); lineTo(21f, 13f); close()
             moveTo(7f, 17f); lineTo(7f, 15f); lineTo(21f, 15f); lineTo(21f, 17f); close()
             moveTo(7f, 7f); lineTo(21f, 7f); lineTo(21f, 9f); lineTo(7f, 9f); close()
+        }
+    }.build()
+}
+
+// Inline airplanemode_active icon (Material Symbols).
+private val AirplaneActiveIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f
+    ).apply {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(21f, 16f)
+            verticalLineToRelative(-2f)
+            lineToRelative(-8f, -5f)
+            verticalLineTo(3.5f)
+            curveTo(13f, 2.67f, 12.33f, 2f, 11.5f, 2f)
+            reflectiveCurveTo(10f, 2.67f, 10f, 3.5f)
+            verticalLineTo(9f)
+            lineToRelative(-8f, 5f)
+            verticalLineToRelative(2f)
+            lineToRelative(8f, -2.5f)
+            verticalLineTo(19f)
+            lineToRelative(-2f, 1.5f)
+            verticalLineTo(22f)
+            lineToRelative(3.5f, -1f)
+            lineToRelative(3.5f, 1f)
+            verticalLineToRelative(-1.5f)
+            lineTo(13f, 19f)
+            verticalLineToRelative(-5.5f)
+            close()
+        }
+    }.build()
+}
+
+// Airplane glyph with a diagonal strikethrough — visually mirrors the
+// way BluetoothDisabledIcon crosses the BT glyph for the "off" state.
+private val AirplaneInactiveIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f
+    ).apply {
+        // Same airplane silhouette as AirplaneActiveIcon
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(21f, 16f)
+            verticalLineToRelative(-2f)
+            lineToRelative(-8f, -5f)
+            verticalLineTo(3.5f)
+            curveTo(13f, 2.67f, 12.33f, 2f, 11.5f, 2f)
+            reflectiveCurveTo(10f, 2.67f, 10f, 3.5f)
+            verticalLineTo(9f)
+            lineToRelative(-8f, 5f)
+            verticalLineToRelative(2f)
+            lineToRelative(8f, -2.5f)
+            verticalLineTo(19f)
+            lineToRelative(-2f, 1.5f)
+            verticalLineTo(22f)
+            lineToRelative(3.5f, -1f)
+            lineToRelative(3.5f, 1f)
+            verticalLineToRelative(-1.5f)
+            lineTo(13f, 19f)
+            verticalLineToRelative(-5.5f)
+            close()
+        }
+        // Diagonal strike from top-right to bottom-left (parallelogram bar).
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(20f, 2.5f)
+            lineTo(21.5f, 4f)
+            lineTo(4f, 21.5f)
+            lineTo(2.5f, 20f)
+            close()
+        }
+    }.build()
+}
+
+// Chain-link icon (Material Symbols `link`) — used on the hero circle as
+// the "establish connection" visual. Distinct from the BT glyph so the
+// connection action and the BT-status chip don't read as the same thing.
+private val ConnectionLinkIcon: ImageVector by lazy {
+    ImageVector.Builder(
+        defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f
+    ).apply {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(3.9f, 12f)
+            curveToRelative(0f, -1.71f, 1.39f, -3.1f, 3.1f, -3.1f)
+            horizontalLineToRelative(4f)
+            verticalLineTo(7f)
+            horizontalLineTo(7f)
+            curveToRelative(-2.76f, 0f, -5f, 2.24f, -5f, 5f)
+            reflectiveCurveToRelative(2.24f, 5f, 5f, 5f)
+            horizontalLineToRelative(4f)
+            verticalLineToRelative(-1.9f)
+            horizontalLineTo(7f)
+            curveToRelative(-1.71f, 0f, -3.1f, -1.39f, -3.1f, -3.1f)
+            close()
+            moveTo(8f, 13f)
+            horizontalLineToRelative(8f)
+            verticalLineToRelative(-2f)
+            horizontalLineTo(8f)
+            verticalLineToRelative(2f)
+            close()
+            moveTo(17f, 7f)
+            horizontalLineToRelative(-4f)
+            verticalLineToRelative(1.9f)
+            horizontalLineToRelative(4f)
+            curveToRelative(1.71f, 0f, 3.1f, 1.39f, 3.1f, 3.1f)
+            reflectiveCurveToRelative(-1.39f, 3.1f, -3.1f, 3.1f)
+            horizontalLineToRelative(-4f)
+            verticalLineTo(17f)
+            horizontalLineToRelative(4f)
+            curveToRelative(2.76f, 0f, 5f, -2.24f, 5f, -5f)
+            reflectiveCurveToRelative(-2.24f, -5f, -5f, -5f)
+            close()
         }
     }.build()
 }

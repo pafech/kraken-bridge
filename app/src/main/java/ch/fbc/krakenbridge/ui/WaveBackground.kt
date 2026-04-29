@@ -42,28 +42,32 @@ fun WaveBackground(modifier: Modifier = Modifier) {
     )
 
     val layers = listOf(
+        // Foam (top, translucent)
         WaveLayer(
             baseYFraction = 0.72f,
             amplitude = 28f,
             wavelength = 520f,
             periodMs = 12_000,
-            color = OceanAquaLight.copy(alpha = 0.10f),
+            color = OceanAquaLight.copy(alpha = 0.32f),
             reversed = false
         ),
+        // Main water body
         WaveLayer(
             baseYFraction = 0.80f,
             amplitude = 22f,
             wavelength = 380f,
             periodMs = 9_000,
-            color = OceanAqua.copy(alpha = 0.18f),
+            color = OceanAqua.copy(alpha = 0.55f),
             reversed = true
         ),
+        // Deep water (bottom). NOT OceanSurface — that's the gradient's
+        // top stop, so the wave used to vanish into the background.
         WaveLayer(
             baseYFraction = 0.88f,
             amplitude = 18f,
             wavelength = 260f,
             periodMs = 7_000,
-            color = OceanSurface.copy(alpha = 0.55f),
+            color = OceanWaveDeep.copy(alpha = 0.92f),
             reversed = false
         )
     )
