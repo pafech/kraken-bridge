@@ -64,18 +64,6 @@ fun MainScreen(
     var btFlashTrigger by remember { mutableStateOf(0) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Top — app identity. Status bar inset + extra clearance for the
-        // front-facing camera punch-hole.
-        Text(
-            text = "Kraken Dive Photo",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 32.dp)
-        )
 
         // The hero circle anchors at the exact screen vertical centre so it
         // lines up with the edge handles (also CenterStart/CenterEnd). Chips

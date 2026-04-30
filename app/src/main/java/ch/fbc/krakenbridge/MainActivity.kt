@@ -21,7 +21,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -42,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import ch.fbc.krakenbridge.ui.AppHeader
 import ch.fbc.krakenbridge.ui.ChevronLeftIcon
 import ch.fbc.krakenbridge.ui.ChevronRightIcon
 import ch.fbc.krakenbridge.ui.FeatureAction
@@ -203,49 +206,53 @@ class MainActivity : ComponentActivity() {
         val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { 3 })
         val scope = rememberCoroutineScope()
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize()
-            ) { page ->
-                when (page) {
-                    0 -> SettingsPage(sections = buildSections())
-                    1 -> MainScreen(
-                        status = connectionStatus,
-                        message = statusMessage,
-                        bluetoothEnabled = bluetoothAdapterEnabled,
-                        airplaneModeOn = airplaneModeOn,
-                        cameraReady = cameraPermissionsReady(),
-                        onConnect = { startConnection() },
-                        onDisconnect = { stopConnection() },
-                        onToggleBluetooth = { openBluetoothToggle() },
-                        onToggleAirplaneMode = { openAirplaneModeSettings() }
-                    )
-                    else -> HelpScreen(features = features)
-                }
-            }
+        Column(modifier = Modifier.fillMaxSize()) {
+            AppHeader(modifier = Modifier.fillMaxWidth())
 
-            if (pagerState.currentPage > 0) {
-                EdgeHandle(
-                    onLeft = true,
-                    icon = if (pagerState.currentPage == 1) SettingsGearIcon else ChevronLeftIcon,
-                    onClick = {
-                        scope.launch {
-                            pagerState.animateScrollToPage(pagerState.currentPage - 1)
-                        }
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    when (page) {
+                        0 -> SettingsPage(sections = buildSections())
+                        1 -> MainScreen(
+                            status = connectionStatus,
+                            message = statusMessage,
+                            bluetoothEnabled = bluetoothAdapterEnabled,
+                            airplaneModeOn = airplaneModeOn,
+                            cameraReady = cameraPermissionsReady(),
+                            onConnect = { startConnection() },
+                            onDisconnect = { stopConnection() },
+                            onToggleBluetooth = { openBluetoothToggle() },
+                            onToggleAirplaneMode = { openAirplaneModeSettings() }
+                        )
+                        else -> HelpScreen(features = features)
                     }
-                )
-            }
-            if (pagerState.currentPage < 2) {
-                EdgeHandle(
-                    onLeft = false,
-                    icon = if (pagerState.currentPage == 1) InfoIcon else ChevronRightIcon,
-                    onClick = {
-                        scope.launch {
-                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                }
+
+                if (pagerState.currentPage > 0) {
+                    EdgeHandle(
+                        onLeft = true,
+                        icon = if (pagerState.currentPage == 1) SettingsGearIcon else ChevronLeftIcon,
+                        onClick = {
+                            scope.launch {
+                                pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                            }
                         }
-                    }
-                )
+                    )
+                }
+                if (pagerState.currentPage < 2) {
+                    EdgeHandle(
+                        onLeft = false,
+                        icon = if (pagerState.currentPage == 1) InfoIcon else ChevronRightIcon,
+                        onClick = {
+                            scope.launch {
+                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -261,7 +268,7 @@ class MainActivity : ComponentActivity() {
         Box(
             modifier = Modifier
                 .align(if (onLeft) Alignment.CenterStart else Alignment.CenterEnd)
-                .size(48.dp)
+                .size(52.dp)
                 .clip(shape)
                 .background(Color.White.copy(alpha = 0.10f))
                 .border(width = 1.dp, color = tint.copy(alpha = 0.18f), shape = shape)
@@ -272,7 +279,7 @@ class MainActivity : ComponentActivity() {
                 imageVector = icon,
                 contentDescription = null,
                 tint = tint.copy(alpha = 0.85f),
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(26.dp)
             )
         }
     }
