@@ -70,14 +70,14 @@ jobs:
         with:
           name: kraken-bridge-${{ env.VERSION_NAME }}-apk
           path: app/build/outputs/apk/release/*.apk
-          retention-days: 14
+          retention-days: 3
 
       - name: Upload release AAB
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: kraken-bridge-${{ env.VERSION_NAME }}-playstore-aab
           path: app/build/outputs/bundle/release/*.aab
-          retention-days: 14
+          retention-days: 3
 
   # ── Job 2: BDD instrumented tests on Android emulator ─────────────────────
   #
