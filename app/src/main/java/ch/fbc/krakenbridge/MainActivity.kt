@@ -44,6 +44,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import ch.fbc.krakenbridge.ui.ChevronLeftIcon
 import ch.fbc.krakenbridge.ui.ChevronRightIcon
+import ch.fbc.krakenbridge.ui.FeatureAction
 import ch.fbc.krakenbridge.ui.FeaturePermission
 import ch.fbc.krakenbridge.ui.FeatureSection
 import ch.fbc.krakenbridge.ui.HelpScreen
@@ -88,6 +89,11 @@ class MainActivity : ComponentActivity() {
     private var features by mutableStateOf(Features.CameraOnly)
     private var revokePrompts by mutableStateOf<List<RevokePrompt>>(emptyList())
     private var pendingToggle: PendingToggle? = null
+
+    // Sequential Camera setup state. Holds the permission key the chain is
+    // currently waiting on. If onPermissionResult sees the same key still
+    // missing, the user denied → chain stops. Null means no chain running.
+    private var cameraSetupAwaiting: String? = null
 
     private var connectionStatus by mutableStateOf("disconnected")
     private var statusMessage by mutableStateOf("")
@@ -578,6 +584,62 @@ class MainActivity : ComponentActivity() {
         systemSettingsLauncher.launch(intent)
     }
 
+    /**
+     * Walks the Camera permission list and fires the first missing one.
+     * The Camera toggle is the entry point — subsequent grants chain through
+     * onPermissionResult → advanceCameraSetup until either every Camera perm
+     * is granted (toggle locks ON) or the user denies one (chain stops; the
+     * single permission row remains tappable for repair).
+     */
+    private fun startCameraSetup() {
+        cameraSetupAwaiting = ""
+        advanceCameraSetup()
+    }
+
+    private fun advanceCameraSetup() {
+        val next = when {
+            !bluetoothGranted -> "bt"
+            !locationGranted -> "loc"
+            !notificationsGranted -> "notif"
+            !batteryOptimizationExempt -> "battery"
+            !accessibilityEnabled -> "a11y"
+            else -> null
+        }
+        if (next == null) {
+            cameraSetupAwaiting = null
+            return
+        }
+        // Same perm we just asked for is still missing → user denied → stop.
+        if (next == cameraSetupAwaiting) {
+            cameraSetupAwaiting = null
+            return
+        }
+        cameraSetupAwaiting = next
+        when (next) {
+            "bt" -> requestBluetooth()
+            "loc" -> requestLocation()
+            "notif" -> requestNotifications()
+            "battery" -> requestBatteryOptimization()
+            "a11y" -> requestAccessibility()
+        }
+    }
+
+    /**
+     * Banking apps (UBS, Twint, PostFinance, Raiffeisen, …) refuse to launch
+     * while any non-whitelisted accessibility service is enabled. The only
+     * sanctioned escape is `disableSelf()` from the service itself; the user
+     * re-enables it later via the existing Camera permission row.
+     */
+    private fun pauseAccessibilityForBanking() {
+        KrakenAccessibilityService.instance?.disableSelf()
+        accessibilityEnabled = false
+        Toast.makeText(
+            this,
+            "Accessibility paused. Re-enable before next dive.",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
     private fun requestMedia() {
         if (mediaGranted) return
         if (mediaNeedsSettings) {
@@ -642,7 +704,7 @@ class MainActivity : ComponentActivity() {
         refreshPermissionState()
         accessibilityEnabled = isAccessibilityServiceEnabled()
 
-        val pending = pendingToggle ?: return
+        val pending = pendingToggle
         pendingToggle = null
         when (pending) {
             PendingToggle.Gallery -> if (!mediaGranted) {
@@ -653,6 +715,11 @@ class MainActivity : ComponentActivity() {
                 features = features.copy(diveMode = false)
                 featureRepo.save(features)
             }
+            null -> {}
+        }
+
+        if (cameraSetupAwaiting != null) {
+            advanceCameraSetup()
         }
     }
 
@@ -693,16 +760,24 @@ class MainActivity : ComponentActivity() {
         FeatureSection(
             name = "Camera",
             description = "Capture photos and videos via the housing shutter button.",
-            isLocked = true,
-            isEnabled = true,
-            onToggle = {},
+            // Locked once every permission is granted — Camera is the core
+            // feature and cannot be turned off afterwards. While missing,
+            // the toggle is the entry point to a sequential setup walkthrough.
+            isLocked = cameraPermissionsReady(),
+            isEnabled = cameraPermissionsReady(),
+            onToggle = { if (it) startCameraSetup() },
             permissions = listOf(
                 permRow("Bluetooth", bluetoothGranted, bluetoothNeedsSettings, ::requestBluetooth),
                 permRow("Location", locationGranted, locationNeedsSettings, ::requestLocation),
                 permRow("Notifications", notificationsGranted, notificationsNeedsSettings, ::requestNotifications),
                 permRow("Battery exemption", batteryOptimizationExempt, false, ::requestBatteryOptimization),
                 permRow("Accessibility service", accessibilityEnabled, false, ::requestAccessibility)
-            )
+            ),
+            action = if (accessibilityEnabled) FeatureAction(
+                label = "Pause for banking apps",
+                subtitle = "UBS, Twint and others block apps with an active accessibility service. Tap to pause — re-enable above before your next dive.",
+                onTap = ::pauseAccessibilityForBanking
+            ) else null
         ),
         FeatureSection(
             name = "Gallery",
