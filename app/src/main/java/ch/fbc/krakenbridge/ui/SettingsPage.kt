@@ -22,13 +22,20 @@ data class FeaturePermission(
     val onTap: () -> Unit
 )
 
+data class FeatureAction(
+    val label: String,
+    val subtitle: String,
+    val onTap: () -> Unit
+)
+
 data class FeatureSection(
     val name: String,
     val description: String,
     val isLocked: Boolean,
     val isEnabled: Boolean,
     val onToggle: (Boolean) -> Unit,
-    val permissions: List<FeaturePermission>
+    val permissions: List<FeaturePermission>,
+    val action: FeatureAction? = null
 )
 
 /**
@@ -128,6 +135,38 @@ private fun FeatureSectionCard(section: FeatureSection) {
                     }
                 }
             }
+
+            section.action?.let { action ->
+                Spacer(modifier = Modifier.height(10.dp))
+                ActionInlineRow(action)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionInlineRow(action: FeatureAction) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = action.onTap),
+        shape = RoundedCornerShape(10.dp),
+        color = KrakenAmber.copy(alpha = 0.14f)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(
+                text = action.label,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = KrakenAmber
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = action.subtitle,
+                fontSize = 12.sp,
+                color = OceanTextMuted,
+                lineHeight = 16.sp
+            )
         }
     }
 }
