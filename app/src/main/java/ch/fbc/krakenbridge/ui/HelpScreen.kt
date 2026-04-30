@@ -19,24 +19,23 @@ fun HelpScreen(features: Features) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
-            .padding(top = 80.dp, start = 24.dp, end = 24.dp, bottom = 24.dp)
+            .padding(top = 24.dp, start = 60.dp, end = 60.dp, bottom = 24.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = "Button Mapping",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
         )
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         SectionLabel(text = "Camera Mode", color = KrakenGreen)
         Spacer(modifier = Modifier.height(12.dp))
         HelpRow("Shutter (red)", "Take photo / Record video")
-        HelpRow("Fn", "Toggle Photo ↔ Video mode")
+        HelpRow("Fn", "Toggle Photo / Video")
         HelpRow("Plus (+)", "Focus closer")
         HelpRow("Minus (-)", "Focus farther")
         HelpRow("OK", "Auto-focus (center)")
