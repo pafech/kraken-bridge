@@ -21,9 +21,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -37,6 +37,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -200,59 +202,73 @@ class MainActivity : ComponentActivity() {
      * (left), use the camera (centre), reference button mappings (right).
      * The initial page lands on Settings until every required permission is
      * granted; afterwards the app opens directly on Main.
+     *
+     * The pager fills the full viewport so its centre matches the screen
+     * centre — that's what anchors the hero circle and the EdgeHandles.
+     * AppHeader overlays on top; Settings / Help receive the measured
+     * header height as a top inset so their content starts below it.
      */
     @Composable
     private fun MainPager(initialPage: Int) {
         val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { 3 })
         val scope = rememberCoroutineScope()
+        var headerHeightPx by remember { mutableIntStateOf(0) }
+        val headerInset = with(LocalDensity.current) { headerHeightPx.toDp() }
 
-        Column(modifier = Modifier.fillMaxSize()) {
-            AppHeader(modifier = Modifier.fillMaxWidth())
-
-            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize()
-                ) { page ->
-                    when (page) {
-                        0 -> SettingsPage(sections = buildSections())
-                        1 -> MainScreen(
-                            status = connectionStatus,
-                            message = statusMessage,
-                            bluetoothEnabled = bluetoothAdapterEnabled,
-                            airplaneModeOn = airplaneModeOn,
-                            cameraReady = cameraPermissionsReady(),
-                            onConnect = { startConnection() },
-                            onDisconnect = { stopConnection() },
-                            onToggleBluetooth = { openBluetoothToggle() },
-                            onToggleAirplaneMode = { openAirplaneModeSettings() }
-                        )
-                        else -> HelpScreen(features = features)
+        Box(modifier = Modifier.fillMaxSize()) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                when (page) {
+                    0 -> Box(modifier = Modifier.fillMaxSize().padding(top = headerInset)) {
+                        SettingsPage(sections = buildSections())
+                    }
+                    1 -> MainScreen(
+                        status = connectionStatus,
+                        message = statusMessage,
+                        bluetoothEnabled = bluetoothAdapterEnabled,
+                        airplaneModeOn = airplaneModeOn,
+                        cameraReady = cameraPermissionsReady(),
+                        onConnect = { startConnection() },
+                        onDisconnect = { stopConnection() },
+                        onToggleBluetooth = { openBluetoothToggle() },
+                        onToggleAirplaneMode = { openAirplaneModeSettings() }
+                    )
+                    else -> Box(modifier = Modifier.fillMaxSize().padding(top = headerInset)) {
+                        HelpScreen(features = features)
                     }
                 }
+            }
 
-                if (pagerState.currentPage > 0) {
-                    EdgeHandle(
-                        onLeft = true,
-                        icon = if (pagerState.currentPage == 1) SettingsGearIcon else ChevronLeftIcon,
-                        onClick = {
-                            scope.launch {
-                                pagerState.animateScrollToPage(pagerState.currentPage - 1)
-                            }
+            AppHeader(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .onSizeChanged { headerHeightPx = it.height }
+            )
+
+            if (pagerState.currentPage > 0) {
+                EdgeHandle(
+                    onLeft = true,
+                    icon = if (pagerState.currentPage == 1) SettingsGearIcon else ChevronLeftIcon,
+                    onClick = {
+                        scope.launch {
+                            pagerState.animateScrollToPage(pagerState.currentPage - 1)
                         }
-                    )
-                }
-                if (pagerState.currentPage < 2) {
-                    EdgeHandle(
-                        onLeft = false,
-                        icon = if (pagerState.currentPage == 1) InfoIcon else ChevronRightIcon,
-                        onClick = {
-                            scope.launch {
-                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                            }
+                    }
+                )
+            }
+            if (pagerState.currentPage < 2) {
+                EdgeHandle(
+                    onLeft = false,
+                    icon = if (pagerState.currentPage == 1) InfoIcon else ChevronRightIcon,
+                    onClick = {
+                        scope.launch {
+                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
                         }
-                    )
-                }
+                    }
+                )
             }
         }
     }
