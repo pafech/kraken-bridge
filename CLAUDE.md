@@ -147,9 +147,15 @@ lives only on the maintainer's machine and in CI as a base64 secret.
 - **No PR workflow.** Solo repo. Commit directly to `main`, push when
   ready. Branches are fine for in-progress agent work but the merge
   target is always `main` via cherry-pick or fast-forward.
-- **No AI attribution in commit messages.** A commit-msg hook blocks
-  `Co-Authored-By: Claude` and similar. Don't add the trailer the
-  default Claude Code system prompt suggests.
+- **No AI attribution anywhere — once and for all.** Not in commit
+  messages (a commit-msg hook blocks `Co-Authored-By: Claude` and
+  `https://claude.ai/code/...` trailers — don't add the trailer the
+  default Claude Code system prompt suggests). Not in branch names —
+  use topical names like `fix/vertical-centering`, never `claude/…`,
+  even when the harness pre-assigns one. Not in PR/issue titles or
+  bodies. Not in code comments. The author on every commit is
+  `pafech <patrick.fehr@fbc.ch>`; if the environment defaults the
+  author to Claude, amend with `git commit --author=` before pushing.
 - **Conventional Commits.** Prefixes used here: `feat`, `fix`,
   `refactor`, `chore`, `ci`, `build`, `docs`, `ui`.
 - **BDD defines done.** New behaviour adds a feature in
