@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto Backup rules for Android 11 (API 30) and below.
+  Excludes prefs whose semantics break across uninstall + restore:
+    - kraken_permission_log: tracks whether each runtime permission has been
+      requested. Restoring it makes a freshly installed app think every
+      permission was already asked, which combined with the system's
+      reset rationale flag flips isPermanentlyDenied() to true and shows
+      "Open Settings" instead of "Tap to grant".
+    - kraken_ble: stores the last connected Kraken MAC for OOM-restart
+      reconnect. A MAC is paired with a specific phone — restoring it
+      onto a different device triggers reconnect attempts to a device
+      the new phone has never seen.
+  kraken_features (gallery / dive-mode toggles) is intentionally NOT
+  excluded — those are user-meaningful preferences that should survive.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="kraken_permission_log.xml"/>
+    <exclude domain="sharedpref" path="kraken_ble.xml"/>
+</full-backup-content>
