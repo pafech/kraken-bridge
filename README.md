@@ -35,7 +35,7 @@ Gallery mode opens the most recently captured photo or video directly in single-
 ## Setup
 
 1. Install from Google Play or sideload the APK
-2. Grant permissions when prompted: Bluetooth, Location, Notifications, Photos/Videos
+2. Grant permissions when prompted: Bluetooth, Notifications, Photos/Videos (plus Location on Android 11 and older)
 3. Enable the accessibility service: **Settings > Accessibility > Kraken Dive Photo**
 4. Allow display over other apps when prompted (keeps the screen reachable underwater — see below)
 5. Open the app, tap **Connect to Kraken**
@@ -46,7 +46,7 @@ Gallery mode opens the most recently captured photo or video directly in single-
 | Permission | Why |
 |---|---|
 | Bluetooth Scan/Connect | Discover and connect to the Kraken housing |
-| Location | Required by Android for BLE scanning |
+| Location (Android 11 and older only) | Required for BLE scanning before Android 12 introduced a dedicated Bluetooth Scan permission. The app does not access your location. |
 | Notifications | Foreground service notification (connection status) |
 | Photos & Videos | Query MediaStore to open the latest capture in gallery mode |
 | Display over other apps | Keep the screen on without hitting the lockscreen, while dimming to save battery |
