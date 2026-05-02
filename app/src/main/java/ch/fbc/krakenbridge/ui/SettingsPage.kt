@@ -1,5 +1,11 @@
 package ch.fbc.krakenbridge.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -10,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,7 +56,11 @@ data class FeatureSection(
  * divider — no surface, since the Switch already conveys enabled state.
  */
 @Composable
-fun SettingsPage(sections: List<FeatureSection>) {
+fun SettingsPage(
+    sections: List<FeatureSection>,
+    showReadyCta: Boolean = false,
+    onReadyCtaClick: () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -76,6 +87,21 @@ fun SettingsPage(sections: List<FeatureSection>) {
                     thickness = 1.dp,
                     color = OceanTextMuted.copy(alpha = 0.18f)
                 )
+            }
+        }
+
+        // First-run "you're done with setup, start using it" CTA. Lives inline
+        // so the EdgeHandle stays ambient navigation chrome instead of
+        // doubling as a CTA. The parent persists "shown once" state, so the
+        // button disappears for good after the first tap.
+        AnimatedVisibility(
+            visible = showReadyCta,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Spacer(modifier = Modifier.height(28.dp))
+                ReadyCtaPill(onClick = onReadyCtaClick)
             }
         }
 
@@ -207,6 +233,39 @@ private fun PermissionInlineRow(perm: FeaturePermission) {
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = accent
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReadyCtaPill(onClick: () -> Unit) {
+    val tint = MaterialTheme.colorScheme.onBackground
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(percent = 50),
+        color = Color.White.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.18f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Swipe to main screen",
+                color = tint.copy(alpha = 0.85f),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                imageVector = ChevronRightIcon,
+                contentDescription = null,
+                tint = tint.copy(alpha = 0.85f),
+                modifier = Modifier.size(20.dp)
             )
         }
     }
