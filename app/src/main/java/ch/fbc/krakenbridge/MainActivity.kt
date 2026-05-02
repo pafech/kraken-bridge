@@ -483,8 +483,15 @@ class MainActivity : ComponentActivity() {
                 isPermanentlyDenied(Manifest.permission.BLUETOOTH_CONNECT)
         } else false
 
-        locationGranted = isGranted(Manifest.permission.ACCESS_FINE_LOCATION)
-        locationNeedsSettings = isPermanentlyDenied(Manifest.permission.ACCESS_FINE_LOCATION)
+        // API 31+ uses BLUETOOTH_SCAN + neverForLocation, so location is no
+        // longer required (or even declared in the manifest above SDK 30).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            locationGranted = true
+            locationNeedsSettings = false
+        } else {
+            locationGranted = isGranted(Manifest.permission.ACCESS_FINE_LOCATION)
+            locationNeedsSettings = isPermanentlyDenied(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
 
         notificationsGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             isGranted(Manifest.permission.POST_NOTIFICATIONS)
@@ -789,9 +796,11 @@ class MainActivity : ComponentActivity() {
             isLocked = cameraPermissionsReady(),
             isEnabled = cameraPermissionsReady(),
             onToggle = { if (it) startCameraSetup() },
-            permissions = listOf(
+            permissions = listOfNotNull(
                 permRow("Bluetooth", bluetoothGranted, bluetoothNeedsSettings, ::requestBluetooth),
-                permRow("Location", locationGranted, locationNeedsSettings, ::requestLocation),
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
+                    permRow("Location", locationGranted, locationNeedsSettings, ::requestLocation)
+                else null,
                 permRow("Notifications", notificationsGranted, notificationsNeedsSettings, ::requestNotifications),
                 permRow("Battery exemption", batteryOptimizationExempt, false, ::requestBatteryOptimization),
                 permRow("Accessibility service", accessibilityEnabled, false, ::requestAccessibility)
