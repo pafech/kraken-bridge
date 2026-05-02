@@ -90,10 +90,12 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var featureRepo: FeatureRepository
     private lateinit var permLog: PermissionRequestLog
+    private lateinit var uiHints: UiHints
 
     private var features by mutableStateOf(Features.CameraOnly)
     private var revokePrompts by mutableStateOf<List<RevokePrompt>>(emptyList())
     private var pendingToggle: PendingToggle? = null
+    private var mainPageOpened by mutableStateOf(false)
 
     // Sequential Camera setup state. Holds the permission key the chain is
     // currently waiting on. If onPermissionResult sees the same key still
@@ -189,6 +191,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         featureRepo = FeatureRepository(this)
         permLog = PermissionRequestLog(this)
+        uiHints = UiHints(this)
+        mainPageOpened = uiHints.mainPageOpened
         features = featureRepo.load()
         // refreshPermissionState reads OS state (perms granted, battery, overlay).
         // accessibilityEnabled lives outside that — query it eagerly so the
@@ -232,6 +236,16 @@ class MainActivity : ComponentActivity() {
         var headerHeightPx by remember { mutableIntStateOf(0) }
         val headerInset = with(LocalDensity.current) { headerHeightPx.toDp() }
 
+        // First time the pager lands on Main (page 1), retire the inline
+        // "Swipe to main screen" CTA on the Settings page so subsequent
+        // visits stay calm. Persisted, so it doesn't return on relaunch.
+        LaunchedEffect(pagerState.currentPage) {
+            if (pagerState.currentPage == 1 && !mainPageOpened) {
+                mainPageOpened = true
+                uiHints.mainPageOpened = true
+            }
+        }
+
         Box(modifier = Modifier.fillMaxSize()) {
             HorizontalPager(
                 state = pagerState,
@@ -239,7 +253,13 @@ class MainActivity : ComponentActivity() {
             ) { page ->
                 when (page) {
                     0 -> Box(modifier = Modifier.fillMaxSize().padding(top = headerInset)) {
-                        SettingsPage(sections = buildSections())
+                        SettingsPage(
+                            sections = buildSections(),
+                            showReadyCta = cameraPermissionsReady() && !mainPageOpened,
+                            onReadyCtaClick = {
+                                scope.launch { pagerState.animateScrollToPage(1) }
+                            }
+                        )
                     }
                     1 -> MainScreen(
                         status = connectionStatus,
