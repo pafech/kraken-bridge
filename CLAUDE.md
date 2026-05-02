@@ -284,24 +284,29 @@ order of impact when the next session has a fresh head.
    Service lifecycle + key injection + gesture dispatch + a11y-tree
    dump + coordinate maths. Same decomposition argument.
 
-16. **Switch BLE to Companion Device Manager (CDM).** Available since
-    API 26 — covers our entire `minSdk` range. CDM lets the user pick
-    the housing once via a system device-picker, after which the app
-    can scan/connect **without** declaring or runtime-requesting
-    `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, or any location permission
-    on any API level. The trade-off is a UX shift: on first connect
-    the user sees a system "Choose a device" dialog instead of the
-    current name-filtered auto-scan, and we persist the resulting
-    `AssociationInfo` instead of just the MAC. Implementation work
-    lives in `KrakenBleService` (replace `startScan` with
-    `CompanionDeviceManager.associate`) plus a one-time onboarding
-    screen in `MainActivity`. Net effect on permissions: the Bluetooth
-    + Location rows in the Camera setup walkthrough disappear
-    entirely, and the Play Store listing loses the "Nearby devices"
-    permission. Worth doing once the cleanup in items 1–3 has made
-    the BLE service decomposable. Decoupled from the API-31+ location
-    cleanup already shipped — that was a no-cost win; CDM is a
-    deliberate UX change.
+16. **Companion Device Manager (CDM) — investigated 2026-05-02, parked.**
+    Earlier notes here claimed CDM would let us drop `BLUETOOTH_SCAN`
+    and `BLUETOOTH_CONNECT`. That is wrong. The official docs are
+    explicit: CDM only removes the **location** permission from the
+    discovery scan, and it provides a system device-picker UI. On
+    API 31+ the app must still declare and runtime-request
+    `BLUETOOTH_SCAN` and `BLUETOOTH_CONNECT` to scan and talk to the
+    associated device. CDM also does **not** remove the "Nearby
+    devices" entry from the Play Store listing — that's tied to
+    `BLUETOOTH_SCAN`. The genuine permission win (skipping
+    `ACCESS_FINE_LOCATION` during discovery) only matters on API
+    26–30, and we already capped that permission at
+    `maxSdkVersion="30"` in the manifest, so the net change to our
+    walkthrough on modern devices is **zero permission rows removed**.
+    What CDM would still buy: a polished system pairing dialog,
+    `CompanionDeviceService` lifecycle binding (redundant with our
+    foreground service), and `REQUEST_COMPANION_*` background hooks
+    (we don't need them). Not worth the BLE-service rewrite and the
+    UX shift from silent name-filtered auto-scan to a system picker
+    on first connect. Revisit only if Google tightens scan policy
+    such that CDM becomes a privileged path. Sources:
+    [Companion device pairing](https://developer.android.com/develop/connectivity/bluetooth/companion-device-pairing),
+    [Bluetooth permissions](https://developer.android.com/develop/connectivity/bluetooth/bt-permissions).
 
 ### Medium impact (correctness, ergonomics)
 
