@@ -148,21 +148,38 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // markRequested fires from the result callback, not before launch:
+    // marking is the system's promise that a dialog actually returned a
+    // result. Marking pre-launch leaves a "marked but never asked" record
+    // if the process dies between mark and launch — same false-positive
+    // symptom as a backup restore of kraken_permission_log.
     private val bluetoothPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { onPermissionResult() }
+    ) { results ->
+        results.keys.forEach { permLog.markRequested(it) }
+        onPermissionResult()
+    }
 
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { onPermissionResult() }
+    ) { results ->
+        results.keys.forEach { permLog.markRequested(it) }
+        onPermissionResult()
+    }
 
     private val mediaPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { onPermissionResult() }
+    ) { results ->
+        results.keys.forEach { permLog.markRequested(it) }
+        onPermissionResult()
+    }
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { onPermissionResult() }
+    ) { results ->
+        results.keys.forEach { permLog.markRequested(it) }
+        onPermissionResult()
+    }
 
     private val systemSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -564,8 +581,6 @@ class MainActivity : ComponentActivity() {
         }
         if (bluetoothGranted) return
         if (bluetoothNeedsSettings) { openAppDetailsSettings(); return }
-        permLog.markRequested(Manifest.permission.BLUETOOTH_SCAN)
-        permLog.markRequested(Manifest.permission.BLUETOOTH_CONNECT)
         bluetoothPermissionLauncher.launch(
             arrayOf(
                 Manifest.permission.BLUETOOTH_SCAN,
@@ -577,7 +592,6 @@ class MainActivity : ComponentActivity() {
     private fun requestLocation() {
         if (locationGranted) return
         if (locationNeedsSettings) { openAppDetailsSettings(); return }
-        permLog.markRequested(Manifest.permission.ACCESS_FINE_LOCATION)
         locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
     }
 
@@ -587,7 +601,6 @@ class MainActivity : ComponentActivity() {
         }
         if (notificationsGranted) return
         if (notificationsNeedsSettings) { openAppDetailsSettings(); return }
-        permLog.markRequested(Manifest.permission.POST_NOTIFICATIONS)
         notificationPermissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
     }
 
@@ -685,10 +698,8 @@ class MainActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 permissions.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
             }
-            permissions.forEach { permLog.markRequested(it) }
             mediaPermissionLauncher.launch(permissions.toTypedArray())
         } else {
-            permLog.markRequested(Manifest.permission.READ_EXTERNAL_STORAGE)
             mediaPermissionLauncher.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
         }
     }

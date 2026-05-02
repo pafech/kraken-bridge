@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Data extraction rules for Android 12 (API 31) and above. Replaces
+  fullBackupContent on modern devices and additionally covers the
+  device-to-device transfer path. See backup_rules.xml for the rationale
+  behind each exclusion.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="kraken_permission_log.xml"/>
+        <exclude domain="sharedpref" path="kraken_ble.xml"/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="kraken_permission_log.xml"/>
+        <exclude domain="sharedpref" path="kraken_ble.xml"/>
+    </device-transfer>
+</data-extraction-rules>
