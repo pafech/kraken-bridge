@@ -39,17 +39,21 @@ data class FeatureSection(
 )
 
 /**
- * Single configuration surface. Each feature card shows its own toggle plus
- * the permissions it requires inline — tapping a row fires the corresponding
+ * Single configuration surface. Each feature lists its toggle plus the
+ * permissions it requires inline — tapping a row fires the corresponding
  * system dialog. Optional features that fail to acquire a required permission
  * revert to OFF (handled by the parent).
+ *
+ * Asymmetric horizontal padding keeps the right-side EdgeHandle (next-page
+ * chevron) clear of the toggles. Sections are separated by a hairline
+ * divider — no surface, since the Switch already conveys enabled state.
  */
 @Composable
 fun SettingsPage(sections: List<FeatureSection>) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp)
+            .padding(start = 24.dp, end = 56.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -65,9 +69,13 @@ fun SettingsPage(sections: List<FeatureSection>) {
         Spacer(modifier = Modifier.height(20.dp))
 
         sections.forEachIndexed { index, section ->
-            FeatureSectionCard(section)
+            FeatureSectionRow(section)
             if (index < sections.lastIndex) {
-                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 16.dp),
+                    thickness = 1.dp,
+                    color = OceanTextMuted.copy(alpha = 0.18f)
+                )
             }
         }
 
@@ -76,69 +84,60 @@ fun SettingsPage(sections: List<FeatureSection>) {
 }
 
 @Composable
-private fun FeatureSectionCard(section: FeatureSection) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        color = if (section.isEnabled)
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.30f)
-        else
-            MaterialTheme.colorScheme.surface
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = section.name,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        if (section.isLocked) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = OceanTextMuted.copy(alpha = 0.18f)
-                            ) {
-                                Text(
-                                    text = "Required",
-                                    fontSize = 11.sp,
-                                    color = OceanTextMuted,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                )
-                            }
+private fun FeatureSectionRow(section: FeatureSection) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = section.name,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (section.isLocked) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = OceanTextMuted.copy(alpha = 0.18f)
+                        ) {
+                            Text(
+                                text = "Required",
+                                fontSize = 11.sp,
+                                color = OceanTextMuted,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
                         }
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = section.description,
-                        fontSize = 13.sp,
-                        color = OceanTextMuted,
-                        lineHeight = 18.sp
-                    )
                 }
-                Spacer(modifier = Modifier.width(16.dp))
-                Switch(
-                    checked = section.isEnabled,
-                    onCheckedChange = if (section.isLocked) null else section.onToggle,
-                    enabled = !section.isLocked
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = section.description,
+                    fontSize = 13.sp,
+                    color = OceanTextMuted,
+                    lineHeight = 18.sp
                 )
             }
+            Spacer(modifier = Modifier.width(16.dp))
+            Switch(
+                checked = section.isEnabled,
+                onCheckedChange = if (section.isLocked) null else section.onToggle,
+                enabled = !section.isLocked
+            )
+        }
 
-            if (section.permissions.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                section.permissions.forEachIndexed { index, perm ->
-                    PermissionInlineRow(perm)
-                    if (index < section.permissions.lastIndex) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                    }
+        if (section.permissions.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            section.permissions.forEachIndexed { index, perm ->
+                PermissionInlineRow(perm)
+                if (index < section.permissions.lastIndex) {
+                    Spacer(modifier = Modifier.height(2.dp))
                 }
             }
+        }
 
-            section.action?.let { action ->
-                Spacer(modifier = Modifier.height(10.dp))
-                ActionInlineRow(action)
-            }
+        section.action?.let { action ->
+            Spacer(modifier = Modifier.height(10.dp))
+            ActionInlineRow(action)
         }
     }
 }
