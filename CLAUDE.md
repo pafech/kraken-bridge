@@ -284,6 +284,25 @@ order of impact when the next session has a fresh head.
    Service lifecycle + key injection + gesture dispatch + a11y-tree
    dump + coordinate maths. Same decomposition argument.
 
+16. **Switch BLE to Companion Device Manager (CDM).** Available since
+    API 26 — covers our entire `minSdk` range. CDM lets the user pick
+    the housing once via a system device-picker, after which the app
+    can scan/connect **without** declaring or runtime-requesting
+    `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, or any location permission
+    on any API level. The trade-off is a UX shift: on first connect
+    the user sees a system "Choose a device" dialog instead of the
+    current name-filtered auto-scan, and we persist the resulting
+    `AssociationInfo` instead of just the MAC. Implementation work
+    lives in `KrakenBleService` (replace `startScan` with
+    `CompanionDeviceManager.associate`) plus a one-time onboarding
+    screen in `MainActivity`. Net effect on permissions: the Bluetooth
+    + Location rows in the Camera setup walkthrough disappear
+    entirely, and the Play Store listing loses the "Nearby devices"
+    permission. Worth doing once the cleanup in items 1–3 has made
+    the BLE service decomposable. Decoupled from the API-31+ location
+    cleanup already shipped — that was a no-cost win; CDM is a
+    deliberate UX change.
+
 ### Medium impact (correctness, ergonomics)
 
 4. **Reconnect backoff is hand-rolled** (`Handler.postDelayed` +
