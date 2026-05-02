@@ -49,14 +49,12 @@ import androidx.core.net.toUri
 import ch.fbc.krakenbridge.ui.AppHeader
 import ch.fbc.krakenbridge.ui.ChevronLeftIcon
 import ch.fbc.krakenbridge.ui.ChevronRightIcon
-import ch.fbc.krakenbridge.ui.FeatureAction
 import ch.fbc.krakenbridge.ui.FeaturePermission
 import ch.fbc.krakenbridge.ui.FeatureSection
 import ch.fbc.krakenbridge.ui.HelpScreen
 import ch.fbc.krakenbridge.ui.InfoIcon
 import ch.fbc.krakenbridge.ui.KrakenBridgeTheme
 import ch.fbc.krakenbridge.ui.MainScreen
-import ch.fbc.krakenbridge.ui.PermissionState
 import ch.fbc.krakenbridge.ui.SettingsGearIcon
 import ch.fbc.krakenbridge.ui.SettingsPage
 import ch.fbc.krakenbridge.ui.WaveBackground
@@ -620,7 +618,7 @@ class MainActivity : ComponentActivity() {
             refreshPermissionState(); return
         }
         if (notificationsGranted) return
-        if (notificationsNeedsSettings) { openAppDetailsSettings(); return }
+        if (notificationsNeedsSettings) { openAppNotificationSettings(); return }
         notificationPermissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
     }
 
@@ -687,22 +685,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Banking apps (UBS, Twint, PostFinance, Raiffeisen, …) refuse to launch
-     * while any non-whitelisted accessibility service is enabled. The only
-     * sanctioned escape is `disableSelf()` from the service itself; the user
-     * re-enables it later via the existing Camera permission row.
-     */
-    private fun pauseAccessibilityForBanking() {
-        KrakenAccessibilityService.instance?.disableSelf()
-        accessibilityEnabled = false
-        Toast.makeText(
-            this,
-            "Accessibility paused. Re-enable before next dive.",
-            Toast.LENGTH_LONG
-        ).show()
-    }
-
     private fun requestMedia() {
         if (mediaGranted) return
         if (mediaNeedsSettings) {
@@ -753,6 +735,28 @@ class MainActivity : ComponentActivity() {
             Toast.LENGTH_LONG
         ).show()
         systemSettingsLauncher.launch(intent)
+    }
+
+    // Lands directly on the app's notification settings — a single big
+    // toggle, no navigation needed. ACTION_APP_NOTIFICATION_SETTINGS is
+    // public since API 26 so it covers the entire minSdk range.
+    //
+    // Note for runtime permissions (Bluetooth, Location, Media): there is
+    // *no* equivalent public deep-link. The system action
+    // ACTION_MANAGE_APP_PERMISSIONS exists but requires
+    // GRANT_RUNTIME_PERMISSIONS (system-only), so non-privileged callers
+    // get a SecurityException at startActivity time even though
+    // resolveActivity returns a hit. Those flows fall back to
+    // openAppDetailsSettings (App Info) — that's as deep as we can go.
+    private fun openAppNotificationSettings() {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        }
+        try {
+            systemSettingsLauncher.launch(intent)
+        } catch (e: Exception) {
+            openAppDetailsSettings()
+        }
     }
 
     /**
@@ -828,60 +832,90 @@ class MainActivity : ComponentActivity() {
             isEnabled = cameraPermissionsReady(),
             onToggle = { if (it) startCameraSetup() },
             permissions = listOfNotNull(
-                permRow("Bluetooth", bluetoothGranted, bluetoothNeedsSettings, ::requestBluetooth),
+                permRow("Bluetooth", bluetoothGranted, ::toggleBluetooth),
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
-                    permRow("Location", locationGranted, locationNeedsSettings, ::requestLocation)
+                    permRow("Location", locationGranted, ::toggleLocation)
                 else null,
-                permRow("Notifications", notificationsGranted, notificationsNeedsSettings, ::requestNotifications),
-                permRow("Battery exemption", batteryOptimizationExempt, false, ::requestBatteryOptimization),
-                permRow("Accessibility service", accessibilityEnabled, false, ::requestAccessibility)
-            ),
-            action = if (accessibilityEnabled) FeatureAction(
-                label = "Pause for banking apps",
-                subtitle = "UBS, Twint and others block apps with an active accessibility service. Tap to pause — re-enable above before your next dive.",
-                onTap = ::pauseAccessibilityForBanking
-            ) else null
+                permRow("Notifications", notificationsGranted, ::toggleNotifications),
+                permRow("Battery exemption", batteryOptimizationExempt, ::toggleBatteryOptimization),
+                permRow(
+                    "Accessibility service",
+                    accessibilityEnabled,
+                    ::toggleAccessibility,
+                    hint = "Banking apps may refuse to launch — toggle off temporarily, on again before the dive."
+                )
+            )
         ),
+        // Gallery and Dive Mode are single-permission features, so the
+        // section toggle is the only toggle — bound to (feature flag AND
+        // permission granted) so it tells the truth about whether the
+        // feature is actually working. No child rows.
         FeatureSection(
             name = "Gallery",
             description = "Browse and delete dive photos using the housing buttons. Needs access to your photos and videos.",
             isLocked = false,
-            isEnabled = features.gallery,
+            isEnabled = features.gallery && mediaGranted,
             onToggle = ::setGalleryEnabled,
-            permissions = if (features.gallery) listOf(
-                permRow(
-                    if (hasPartialMedia) "Photos & Videos (partial — pick \"Allow all\")"
-                    else "Photos & Videos",
-                    mediaGranted, mediaNeedsSettings, ::requestMedia
-                )
-            ) else emptyList()
+            permissions = emptyList(),
+            hint = if (features.gallery && hasPartialMedia)
+                "Partial access detected — toggle on to pick \"Allow all\" in app settings."
+            else null
         ),
         FeatureSection(
             name = "Dive Mode",
             description = "Keep the screen on and dim it during the dive. Without this, your screen may turn off and the lockscreen may engage — you cannot unlock the phone underwater.",
             isLocked = false,
-            isEnabled = features.diveMode,
+            isEnabled = features.diveMode && displayOverlayGranted,
             onToggle = ::setDiveModeEnabled,
-            permissions = if (features.diveMode) listOf(
-                permRow("Display Overlay", displayOverlayGranted, false, ::requestDisplayOverlay)
-            ) else emptyList()
+            permissions = emptyList()
         )
     )
 
     private fun permRow(
         name: String,
         granted: Boolean,
-        needsSettings: Boolean,
-        onTap: () -> Unit
+        onToggle: () -> Unit,
+        hint: String? = null
     ) = FeaturePermission(
         name = name,
-        state = when {
-            granted -> PermissionState.Granted
-            needsSettings -> PermissionState.NeedsSettings
-            else -> PermissionState.Pending
-        },
-        onTap = onTap
+        isOn = granted,
+        onToggle = onToggle,
+        hint = hint
     )
+
+    // Toggle helpers — every Settings row uses the same metaphor (a Switch),
+    // so each helper has to handle both directions: ON-tap (request flow,
+    // existing logic) and OFF-tap (revoke flow). For runtime + special-access
+    // permissions we can only deep-link into app settings — the user revokes
+    // there. For our own accessibility service we own the lifecycle, so we
+    // disableSelf() directly.
+    private fun toggleBluetooth() {
+        if (bluetoothGranted) openAppDetailsSettings() else requestBluetooth()
+    }
+
+    private fun toggleLocation() {
+        if (locationGranted) openAppDetailsSettings() else requestLocation()
+    }
+
+    private fun toggleNotifications() {
+        if (notificationsGranted) openAppNotificationSettings() else requestNotifications()
+    }
+
+    private fun toggleBatteryOptimization() {
+        // No deep-link option for battery optimisation revoke — fall back to
+        // the generic App Info page.
+        if (batteryOptimizationExempt) openAppDetailsSettings() else requestBatteryOptimization()
+    }
+
+    private fun toggleAccessibility() {
+        if (accessibilityEnabled) {
+            KrakenAccessibilityService.instance?.disableSelf()
+            accessibilityEnabled = false
+        } else {
+            requestAccessibility()
+        }
+    }
+
 
     private fun isAccessibilityServiceEnabled(): Boolean {
         val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager

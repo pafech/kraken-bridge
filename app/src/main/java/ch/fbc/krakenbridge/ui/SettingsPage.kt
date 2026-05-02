@@ -9,7 +9,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -21,18 +20,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-enum class PermissionState { Granted, Pending, NeedsSettings }
-
 data class FeaturePermission(
     val name: String,
-    val state: PermissionState,
-    val onTap: () -> Unit
-)
-
-data class FeatureAction(
-    val label: String,
-    val subtitle: String,
-    val onTap: () -> Unit
+    val isOn: Boolean,
+    val onToggle: () -> Unit,
+    val hint: String? = null
 )
 
 data class FeatureSection(
@@ -42,7 +34,7 @@ data class FeatureSection(
     val isEnabled: Boolean,
     val onToggle: (Boolean) -> Unit,
     val permissions: List<FeaturePermission>,
-    val action: FeatureAction? = null
+    val hint: String? = null
 )
 
 /**
@@ -142,6 +134,15 @@ private fun FeatureSectionRow(section: FeatureSection) {
                     color = OceanTextMuted,
                     lineHeight = 18.sp
                 )
+                section.hint?.let {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = it,
+                        fontSize = 12.sp,
+                        color = KrakenAmber,
+                        lineHeight = 16.sp
+                    )
+                }
             }
             Spacer(modifier = Modifier.width(16.dp))
             Switch(
@@ -152,7 +153,7 @@ private fun FeatureSectionRow(section: FeatureSection) {
         }
 
         if (section.permissions.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             section.permissions.forEachIndexed { index, perm ->
                 PermissionInlineRow(perm)
                 if (index < section.permissions.lastIndex) {
@@ -160,81 +161,38 @@ private fun FeatureSectionRow(section: FeatureSection) {
                 }
             }
         }
-
-        section.action?.let { action ->
-            Spacer(modifier = Modifier.height(10.dp))
-            ActionInlineRow(action)
-        }
-    }
-}
-
-@Composable
-private fun ActionInlineRow(action: FeatureAction) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = action.onTap),
-        shape = RoundedCornerShape(10.dp),
-        color = KrakenAmber.copy(alpha = 0.14f)
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Text(
-                text = action.label,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = KrakenAmber
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = action.subtitle,
-                fontSize = 12.sp,
-                color = OceanTextMuted,
-                lineHeight = 16.sp
-            )
-        }
     }
 }
 
 @Composable
 private fun PermissionInlineRow(perm: FeaturePermission) {
-    val accent = when (perm.state) {
-        PermissionState.Granted -> KrakenGreen
-        PermissionState.NeedsSettings -> KrakenAmber
-        PermissionState.Pending -> OceanTextMuted
-    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = perm.state != PermissionState.Granted, onClick = perm.onTap)
-            .padding(vertical = 6.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
-            modifier = Modifier.size(10.dp),
-            shape = CircleShape,
-            color = if (perm.state == PermissionState.Pending)
-                accent.copy(alpha = 0.45f)
-            else
-                accent
-        ) {}
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = perm.name,
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.weight(1f)
-        )
-        if (perm.state != PermissionState.Granted) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = if (perm.state == PermissionState.NeedsSettings)
-                    "Open Settings"
-                else
-                    "Tap to grant",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = accent
+                text = perm.name,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onBackground
             )
+            perm.hint?.let {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = it,
+                    fontSize = 12.sp,
+                    color = OceanTextMuted,
+                    lineHeight = 16.sp
+                )
+            }
         }
+        Spacer(modifier = Modifier.width(12.dp))
+        Switch(
+            checked = perm.isOn,
+            onCheckedChange = { perm.onToggle() }
+        )
     }
 }
 
