@@ -34,7 +34,8 @@ data class FeatureSection(
     val isEnabled: Boolean,
     val onToggle: (Boolean) -> Unit,
     val permissions: List<FeaturePermission>,
-    val hint: String? = null
+    val hint: String? = null,
+    val isMandatory: Boolean = false
 )
 
 /**
@@ -112,7 +113,7 @@ private fun FeatureSectionRow(section: FeatureSection) {
                         fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold
                     )
-                    if (section.isLocked) {
+                    if (section.isMandatory) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = RoundedCornerShape(8.dp),

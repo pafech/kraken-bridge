@@ -825,9 +825,12 @@ class MainActivity : ComponentActivity() {
         FeatureSection(
             name = "Camera",
             description = "Capture photos and videos via the housing shutter button.",
-            // Locked once every permission is granted — Camera is the core
-            // feature and cannot be turned off afterwards. While missing,
-            // the toggle is the entry point to a sequential setup walkthrough.
+            // isMandatory drives the "Required" badge — always visible so the
+            // user sees upfront that this feature must be set up. isLocked
+            // gates the Switch: open before setup (entry point to the
+            // walkthrough), locked after grant since Camera is the core
+            // feature and cannot be turned off.
+            isMandatory = true,
             isLocked = cameraPermissionsReady(),
             isEnabled = cameraPermissionsReady(),
             onToggle = { if (it) startCameraSetup() },
