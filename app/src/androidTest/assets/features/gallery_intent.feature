@@ -20,9 +20,10 @@ Feature: Gallery opens latest media in single-item view
     And the intent has a data URI set
     And the intent MIME type is not null
 
-  Scenario: Gallery intent targets Google Photos when installed
+  @smoke
+  Scenario: Gallery intent has no package set so the system default resolves
     When the gallery intent is constructed for the latest media
-    Then the intent package is "com.google.android.apps.photos"
+    Then the intent has no package set
 
   @device-only
   Scenario: Video media returns video MIME type

@@ -1,9 +1,12 @@
 # Kraken Dive Photo — Agent Onboarding
 
 Android app that turns a Kraken dive housing's BLE button remote into a
-camera + gallery controller for Google Camera and Google Photos. The
-phone is sealed inside the housing during a dive, so every interaction
-must work without touching the screen.
+camera + gallery controller for the phone's default camera and gallery
+apps. Stock-Android (Google Camera + Photos) is fully tuned today;
+Samsung (Camera + Gallery) is the next vendor adapter once a real
+Galaxy device is available for accessibility-tree capture. The phone
+is sealed inside the housing during a dive, so every interaction must
+work without touching the screen.
 
 This file is for the **next AI coding agent** picking up the repo. It
 captures the architecture, conventions, and traps that aren't obvious
