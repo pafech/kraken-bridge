@@ -750,21 +750,9 @@ class KrakenBleService : Service() {
                 val intent = Intent(Intent.ACTION_VIEW).apply {
                     setDataAndType(uri, mimeType)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    setPackage("com.google.android.apps.photos")
                 }
                 startActivity(intent)
-                Log.i(TAG, "Opened latest media in Google Photos: $uri ($mimeType)")
-                return
-            } catch (e: Exception) {
-                Log.w(TAG, "Google Photos not available, trying default viewer")
-            }
-            try {
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(uri, mimeType)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(intent)
-                Log.i(TAG, "Opened latest media in default viewer: $uri")
+                Log.i(TAG, "Opened latest media in default gallery: $uri ($mimeType)")
                 return
             } catch (e: Exception) {
                 Log.e(TAG, "No viewer available for $uri: ${e.message}")
@@ -776,19 +764,7 @@ class KrakenBleService : Service() {
                 openAppSettings()
                 return
             }
-            Log.w(TAG, "No media found on device — opening Google Photos home")
-        }
-
-        // Fallback: open Google Photos launcher (lands on home screen)
-        try {
-            val intent = Intent(Intent.ACTION_MAIN).apply {
-                setPackage("com.google.android.apps.photos")
-                addCategory(Intent.CATEGORY_LAUNCHER)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to open Google Photos: ${e.message}")
+            Log.w(TAG, "No media found on device — nothing to open")
         }
     }
 
@@ -913,25 +889,21 @@ class KrakenBleService : Service() {
     }
     
     private fun openCamera() {
+        // INTENT_ACTION_STILL_IMAGE_CAMERA opens the user's default camera app
+        // in normal capture mode. Unlike ACTION_IMAGE_CAPTURE (which is the
+        // "capture for caller" contract and hands a single photo back to us),
+        // this leaves the camera in free-shooting mode with full UI — the
+        // experience the diver expects on every BLE shutter press.
+        // No setPackage: the system honours whichever camera app the user
+        // has chosen as default.
         try {
-            val intent = Intent(Intent.ACTION_MAIN).apply {
-                setPackage("com.google.android.GoogleCamera")
-                addCategory(Intent.CATEGORY_LAUNCHER)
+            val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
-            Log.i(TAG, "Opened Google Camera")
+            Log.i(TAG, "Opened default camera via STILL_IMAGE_CAMERA")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to open Google Camera: ${e.message}")
-            // Try generic camera intent
-            try {
-                val intent = Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(intent)
-            } catch (e2: Exception) {
-                Log.e(TAG, "Failed to open any camera: ${e2.message}")
-            }
+            Log.e(TAG, "Failed to open default camera: ${e.message}")
         }
     }
     
