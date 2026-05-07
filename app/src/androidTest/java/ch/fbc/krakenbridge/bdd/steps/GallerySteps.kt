@@ -1,5 +1,6 @@
 package ch.fbc.krakenbridge.bdd.steps
 
+import android.os.Build
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
@@ -14,11 +15,11 @@ import org.junit.Assert.assertNotNull
 /**
  * Step definitions for Google Photos gallery navigation and deletion scenarios.
  *
- * Strategy-ordering assertions verify the *design contract* of
- * [KrakenAccessibilityService.clickTrashButton]: content description and text searches
- * must be attempted before resource IDs, and the overflow menu must be tried before
- * falling back to coordinates. These assertions are enforced via code inspection and
- * are documented here as living specification.
+ * Strategy-ordering assertions verify the *design contract* of the trash-button
+ * lookup in `vendor/StockAndroidAdapter.clickTrash`: content description and text
+ * searches must be attempted before resource IDs, and the overflow menu must be
+ * tried before falling back to coordinates. These assertions are enforced via
+ * code inspection and are documented here as living specification.
  *
  * Scenarios that require a real device with Google Photos installed are tagged
  * @device-only in the feature files and excluded from CI by default.
@@ -63,7 +64,7 @@ class GallerySteps {
 
     @Given("the installed Google Photos version code is less than {long}")
     fun assertPhotosVersionLessThan(versionCode: Long) {
-        val installed = accessibilityService?.getGooglePhotosVersionCode() ?: -1L
+        val installed = installedPhotosVersionCode()
         check(installed in 1 until versionCode) {
             "Google Photos version $installed is not less than $versionCode – " +
             "this scenario requires an older version of Photos"
@@ -72,10 +73,24 @@ class GallerySteps {
 
     @Given("the installed Google Photos version code is at least {long}")
     fun assertPhotosVersionAtLeast(versionCode: Long) {
-        val installed = accessibilityService?.getGooglePhotosVersionCode() ?: -1L
+        val installed = installedPhotosVersionCode()
         check(installed >= versionCode) {
             "Google Photos version $installed is less than $versionCode – " +
             "this scenario requires a newer version of Photos"
+        }
+    }
+
+    private fun installedPhotosVersionCode(): Long {
+        val pm = InstrumentationRegistry.getInstrumentation().targetContext.packageManager
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                pm.getPackageInfo(PHOTOS_PKG, 0).longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getPackageInfo(PHOTOS_PKG, 0).versionCode.toLong()
+            }
+        } catch (e: Exception) {
+            -1L
         }
     }
 
