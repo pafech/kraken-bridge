@@ -20,6 +20,8 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.core.content.ContextCompat
+import ch.fbc.krakenbridge.vendor.VendorAdapter
+import ch.fbc.krakenbridge.vendor.VendorRegistry
 
 enum class FocusZone {
     NEAR,    // Bottom of viewfinder - focus on close objects
@@ -50,8 +52,10 @@ class KrakenAccessibilityService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var audioManager: AudioManager
-    private var screenWidth = 0
-    private var screenHeight = 0
+    internal var screenWidth = 0
+        private set
+    internal var screenHeight = 0
+        private set
 
     private val keyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -71,11 +75,11 @@ class KrakenAccessibilityService : AccessibilityService() {
 
     /**
      * Find an AccessibilityNodeInfo by resource ID
-     * Supports both full IDs ("com.google.android.GoogleCamera:id/shutter_button") 
+     * Supports both full IDs ("vendor.package:id/some_button")
      * and short IDs ("camera_supermode")
      * @return The first matching node, or null if not found
      */
-    private fun findNodeByResourceId(resourceId: String): AccessibilityNodeInfo? {
+    internal fun findNodeByResourceId(resourceId: String): AccessibilityNodeInfo? {
         val root = rootInActiveWindow ?: run {
             Log.w(TAG, "No active window root")
             return null
@@ -129,7 +133,7 @@ class KrakenAccessibilityService : AccessibilityService() {
      * @param exactMatch If true, requires exact match; if false, uses contains matching
      * @return The first matching node, or null if not found
      */
-    private fun findNodeByContentDescription(contentDesc: String, exactMatch: Boolean = false): AccessibilityNodeInfo? {
+    internal fun findNodeByContentDescription(contentDesc: String, exactMatch: Boolean = false): AccessibilityNodeInfo? {
         val root = rootInActiveWindow ?: run {
             Log.w(TAG, "No active window root")
             return null
@@ -226,8 +230,8 @@ class KrakenAccessibilityService : AccessibilityService() {
      * Find a clickable node by class type in a specific screen region
      * Useful for finding buttons in the bottom action bar
      */
-    private fun findClickableInRegion(
-        minX: Float, maxX: Float, 
+    internal fun findClickableInRegion(
+        minX: Float, maxX: Float,
         minY: Float, maxY: Float,
         className: String? = null
     ): AccessibilityNodeInfo? {
@@ -272,7 +276,7 @@ class KrakenAccessibilityService : AccessibilityService() {
     /**
      * Find a node by its text content
      */
-    private fun findNodeByText(text: String, exactMatch: Boolean = false): AccessibilityNodeInfo? {
+    internal fun findNodeByText(text: String, exactMatch: Boolean = false): AccessibilityNodeInfo? {
         val root = rootInActiveWindow ?: return null
         return findNodeByTextRecursive(root, text, exactMatch)
     }
@@ -311,7 +315,7 @@ class KrakenAccessibilityService : AccessibilityService() {
      * Get all clickable nodes in the bottom portion of the screen
      * Returns them in order from left to right
      */
-    private fun getBottomActionBarItems(): List<AccessibilityNodeInfo> {
+    internal fun getBottomActionBarItems(): List<AccessibilityNodeInfo> {
         val root = rootInActiveWindow ?: return emptyList()
 
         // Bottom action bar is typically in the bottom 15% of the screen
@@ -324,65 +328,6 @@ class KrakenAccessibilityService : AccessibilityService() {
                 node.getBoundsInScreen(rect)
                 rect.centerX()
             }
-    }
-
-    /**
-     * Detect the installed Google Photos version code.
-     * Returns -1 if Google Photos is not installed or version cannot be read.
-     * Useful for selecting version-specific detection strategies.
-     */
-    internal fun getGooglePhotosVersionCode(): Long {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                packageManager.getPackageInfo("com.google.android.apps.photos", 0).longVersionCode
-            } else {
-                @Suppress("DEPRECATION")
-                packageManager.getPackageInfo("com.google.android.apps.photos", 0).versionCode.toLong()
-            }
-        } catch (e: Exception) {
-            -1L
-        }
-    }
-
-    /**
-     * Open the "More options" / overflow menu in Google Photos and return the first matching item.
-     * Some Google Photos versions (typically 6.90+) hide the delete action behind an overflow menu.
-     * The overflow is opened and a 600 ms pause is given for it to animate before searching.
-     *
-     * @param itemDescriptions Content descriptions and text labels to look for in the open menu.
-     * @return The matching node inside the menu, or null if the overflow wasn't found or the item
-     *         was not present inside it.
-     */
-    private fun clickOverflowAndFindItem(vararg itemDescriptions: String): AccessibilityNodeInfo? {
-        val overflowNode = findNodeByContentDescription("More options", exactMatch = false)
-            ?: findNodeByContentDescription("More", exactMatch = true)
-            ?: findNodeByResourceId("com.google.android.apps.photos:id/overflow_menu")
-            ?: findNodeByResourceId("com.google.android.apps.photos:id/menu_overflow")
-            ?: findNodeByResourceId("com.google.android.apps.photos:id/action_overflow")
-
-        if (overflowNode == null) {
-            Log.d(TAG, "No overflow menu button found in current window")
-            return null
-        }
-
-        Log.i(TAG, "Found overflow menu – opening to search for delete option")
-        if (!clickNode(overflowNode)) {
-            getNodeCenter(overflowNode)?.let { (x, y) -> dispatchTap(x, y) }
-        }
-
-        // Allow the dropdown to animate open
-        Thread.sleep(600)
-
-        for (desc in itemDescriptions) {
-            val node = findNodeByText(desc, exactMatch = false)
-                ?: findNodeByContentDescription(desc, exactMatch = false)
-            if (node != null) {
-                Log.i(TAG, "Found '$desc' inside overflow menu")
-                return node
-            }
-        }
-        Log.w(TAG, "Overflow menu opened but none of the target items were found")
-        return null
     }
 
     private fun collectClickableNodesInRegion(
@@ -421,7 +366,7 @@ class KrakenAccessibilityService : AccessibilityService() {
      * Click on an AccessibilityNodeInfo
      * @return true if click was performed successfully
      */
-    private fun clickNode(node: AccessibilityNodeInfo?): Boolean {
+    internal fun clickNode(node: AccessibilityNodeInfo?): Boolean {
         if (node == null) {
             Log.w(TAG, "Cannot click null node")
             return false
@@ -444,7 +389,7 @@ class KrakenAccessibilityService : AccessibilityService() {
     /**
      * Get the center coordinates of a node's bounds on screen
      */
-    private fun getNodeCenter(node: AccessibilityNodeInfo): Pair<Float, Float>? {
+    internal fun getNodeCenter(node: AccessibilityNodeInfo): Pair<Float, Float>? {
         val rect = Rect()
         node.getBoundsInScreen(rect)
 
@@ -601,35 +546,7 @@ class KrakenAccessibilityService : AccessibilityService() {
     }
     
     private fun dispatchShutterTap() {
-        // Try to find shutter button by resource ID first
-        var node = findNodeByResourceId("com.google.android.GoogleCamera:id/shutter_button")
-
-        // Fallback: try by content description
-        if (node == null) {
-            node = findNodeByContentDescription("Take photo", exactMatch = false)
-                ?: findNodeByContentDescription("Start video", exactMatch = false)
-                ?: findNodeByContentDescription("Stop video", exactMatch = false)
-        }
-
-        if (node != null) {
-            Log.i(TAG, "Found shutter button: desc=${node.contentDescription}, " +
-                    "clickable=${node.isClickable}, class=${node.className}")
-            
-            // Google Camera ignores accessibility ACTION_CLICK for security reasons
-            // Always use coordinate tap for the shutter - it simulates real touch input
-            getNodeCenter(node)?.let { (x, y) ->
-                Log.i(TAG, "Tapping shutter at node center ($x, $y)")
-                dispatchTap(x, y)
-                return
-            }
-        }
-        
-        // Last resort fallback: use hardcoded coordinates
-        Log.w(TAG, "Could not find shutter button, using fallback coordinates")
-        val x = screenWidth / 2f
-        val y = screenHeight * 0.75f  // Shutter is roughly 3/4 down the screen
-        Log.i(TAG, "Tapping shutter at fallback position ($x, $y)")
-        dispatchTap(x, y)
+        currentAdapter().shutterTap(this)
     }
     
     private fun dispatchFocusTap(zone: FocusZone) {
@@ -653,7 +570,7 @@ class KrakenAccessibilityService : AccessibilityService() {
         dispatchTap(x, y)
     }
     
-    private fun dispatchTap(x: Float, y: Float) {
+    internal fun dispatchTap(x: Float, y: Float) {
         val path = Path().apply {
             moveTo(x, y)
         }
@@ -712,197 +629,20 @@ class KrakenAccessibilityService : AccessibilityService() {
     }
     
     /**
-     * Click the trash/bin button in Google Photos single photo view.
-     *
-     * Strategy order – most stable to most version-fragile across Google Photos releases:
-     *  1. Content description  (semantic labels, stable across versions and languages)
-     *  2. Visible text labels  (also semantic, works when button shows text)
-     *  3. Rightmost bottom action bar item  (positional – trash is always last)
-     *  4. Overflow / "More options" menu  (newer Photos versions hide delete here)
-     *  5. Known resource IDs  (version-specific; many variants tried as a net)
-     *  6. Region-based clickable search  (bottom-right corner)
-     *  7. Coordinate fallback  (last resort – screen-size independent offset)
+     * Resolve the [VendorAdapter] for the foreground app at this moment. Called
+     * lazily on each dispatch — the foreground package can change between a BLE
+     * shutter press (camera) and a back-button press (gallery), so resolving
+     * once at service start would point at the wrong app.
      */
-    private fun clickTrashButton(): Boolean {
-        Log.i(TAG, "Looking for trash button (Photos version code: ${getGooglePhotosVersionCode()})")
-
-        var node: AccessibilityNodeInfo? = null
-
-        // Strategy 1: Content description – most reliable across all Google Photos versions
-        val trashDescriptions = listOf(
-            "Delete", "Move to Bin", "Move to bin", "Move to Trash", "Move to trash",
-            "Bin", "Trash",
-            "Löschen", "Papierkorb", "In Papierkorb",          // German
-            "In Papierkorb verschieben",                         // German long-form
-            "Supprimer", "Corbeille",                            // French
-            "Eliminar", "Papelera"                               // Spanish
-        )
-        for (desc in trashDescriptions) {
-            node = findNodeByContentDescription(desc, exactMatch = false)
-            if (node != null) {
-                Log.i(TAG, "Found trash by content description: $desc")
-                break
-            }
-        }
-
-        // Strategy 2: Visible text labels (icon-only buttons may still carry text in some versions)
-        if (node == null) {
-            Log.d(TAG, "Trying text-based search for trash button")
-            val trashTexts = listOf(
-                "Delete", "Move to bin", "Move to trash", "Bin", "Trash",
-                "Löschen", "Papierkorb", "Supprimer", "Eliminar"
-            )
-            for (text in trashTexts) {
-                node = findNodeByText(text, exactMatch = false)
-                if (node != null) {
-                    Log.i(TAG, "Found trash by text: $text")
-                    break
-                }
-            }
-        }
-
-        // Strategy 3: Rightmost item in the bottom action bar
-        // The delete/trash button is consistently the last (rightmost) button in Photos
-        if (node == null) {
-            Log.d(TAG, "Trying bottom action bar (rightmost item) for trash button")
-            val actionBarItems = getBottomActionBarItems()
-            if (actionBarItems.isNotEmpty()) {
-                node = actionBarItems.last()
-                Log.i(TAG, "Using rightmost of ${actionBarItems.size} action bar items as trash")
-                actionBarItems.forEachIndexed { index, item ->
-                    val rect = Rect()
-                    item.getBoundsInScreen(rect)
-                    Log.d(TAG, "  Action bar item $index: desc=${item.contentDescription}, " +
-                            "id=${item.viewIdResourceName}, class=${item.className}, bounds=$rect")
-                }
-            }
-        }
-
-        // Strategy 4: Overflow / "More options" menu
-        // Newer Google Photos versions (approx. 6.90+) move delete into the ⋮ overflow menu
-        if (node == null) {
-            Log.d(TAG, "Trying overflow menu for trash button")
-            node = clickOverflowAndFindItem(
-                "Delete", "Move to bin", "Move to trash", "Bin", "Trash",
-                "Löschen", "Papierkorb", "Supprimer", "Eliminar"
-            )
-            if (node != null) Log.i(TAG, "Found delete option via overflow menu")
-        }
-
-        // Strategy 5: Known resource IDs (many variants – very version-specific)
-        if (node == null) {
-            Log.d(TAG, "Trying resource IDs for trash button")
-            val trashResourceIds = listOf(
-                "com.google.android.apps.photos:id/trash",
-                "com.google.android.apps.photos:id/move_to_trash",
-                "com.google.android.apps.photos:id/action_trash",
-                "com.google.android.apps.photos:id/delete",
-                "com.google.android.apps.photos:id/action_delete",
-                "com.google.android.apps.photos:id/trash_button",
-                "com.google.android.apps.photos:id/delete_button"
-            )
-            for (resourceId in trashResourceIds) {
-                node = findNodeByResourceId(resourceId)
-                if (node != null) {
-                    Log.i(TAG, "Found trash by resource ID: $resourceId")
-                    break
-                }
-            }
-        }
-
-        // Strategy 6: Any clickable in the bottom-right region
-        if (node == null) {
-            Log.d(TAG, "Trying region-based search for trash button")
-            val minX = screenWidth * 0.75f
-            val maxX = screenWidth.toFloat()
-            val minY = screenHeight * 0.85f
-            val maxY = screenHeight.toFloat()
-            node = findClickableInRegion(minX, maxX, minY, maxY, "ImageButton")
-                ?: findClickableInRegion(minX, maxX, minY, maxY, "ImageView")
-                ?: findClickableInRegion(minX, maxX, minY, maxY, null)
-            if (node != null) Log.i(TAG, "Found trash button by region search")
-        }
-
-        if (node != null) {
-            Log.i(TAG, "Found trash node – clickable:${node.isClickable}, enabled:${node.isEnabled}, " +
-                    "bounds:${node.boundsInScreen()}, class:${node.className}")
-            val clickSuccess = clickNode(node)
-            if (clickSuccess) {
-                Log.i(TAG, "Successfully clicked trash via accessibility")
-                return true
-            }
-            Log.w(TAG, "Node click failed, tapping at node center")
-            getNodeCenter(node)?.let { (x, y) ->
-                Log.i(TAG, "Tapping trash at node center ($x, $y)")
-                dispatchTap(x, y)
-                return true
-            }
-        }
-
-        // Strategy 7: Coordinate fallback (1.034f reaches into the navigation-bar region
-        // where Google Photos renders its action buttons on gesture-nav devices)
-        Log.w(TAG, "All accessibility strategies failed, using coordinate fallback")
-        val trashX = screenWidth * 0.875f
-        val trashY = screenHeight * 1.034f
-        Log.i(TAG, "Tapping trash at fallback coordinates ($trashX, $trashY)")
-        dispatchTap(trashX, trashY)
-        return true
-    }
-
-    private fun AccessibilityNodeInfo.boundsInScreen(): String {
-        val rect = android.graphics.Rect()
-        getBoundsInScreen(rect)
-        return rect.toString()
+    private fun currentAdapter(): VendorAdapter {
+        val pkg = rootInActiveWindow?.packageName?.toString()
+        return VendorRegistry.adapterFor(pkg)
     }
 
     /**
-     * Click the confirm/move to bin button in the deletion dialog
-     */
-    private fun clickConfirmDelete(): Boolean {
-        Log.i(TAG, "Looking for delete confirmation button")
-
-        // Try to find by TEXT first (the button shows "Move to bin" as text)
-        var node = findNodeByText("Move to bin", exactMatch = false)
-            ?: findNodeByText("Move to trash", exactMatch = false)
-            ?: findNodeByText("Delete", exactMatch = false)
-            ?: findNodeByText("Löschen", exactMatch = false)  // German
-            ?: findNodeByText("In Papierkorb", exactMatch = false)  // German
-        
-        // Also try content description as fallback
-        if (node == null) {
-            node = findNodeByContentDescription("Move to bin", exactMatch = false)
-                ?: findNodeByContentDescription("Move to trash", exactMatch = false)
-                ?: findNodeByContentDescription("Delete", exactMatch = false)
-        }
-
-        if (node != null) {
-            Log.i(TAG, "Found confirm button: text=${node.text}, desc=${node.contentDescription}, " +
-                    "clickable=${node.isClickable}, bounds=${node.boundsInScreen()}")
-            
-            // Try to click the node directly
-            if (clickNode(node)) {
-                return true
-            }
-            // If direct click fails, try tapping at node's center coordinates
-            getNodeCenter(node)?.let { (x, y) ->
-                Log.i(TAG, "Direct click failed, tapping confirm at ($x, $y)")
-                dispatchTap(x, y)
-                return true
-            }
-        } else {
-            // Fallback: the confirm button appears in bottom sheet, roughly center-left
-            Log.w(TAG, "Could not find confirm button, using fallback coordinates")
-            val confirmX = screenWidth * 0.3f  // Left side where "Move to bin" text is
-            val confirmY = screenHeight * 0.94f  // Near bottom in the dialog
-            Log.i(TAG, "Tapping confirm at fallback position ($confirmX, $confirmY)")
-            dispatchTap(confirmX, confirmY)
-            return true
-        }
-        return false
-    }
-    
-    /**
-     * Navigate back/up in Google Photos (e.g., return to grid view)
+     * Navigate back/up in the foreground gallery (e.g. return to grid view).
+     * Vendor-neutral: tries a generic "Navigate up" content description first,
+     * then falls back to the system back action.
      */
     fun navigateUpInPhotos(): Boolean {
         Log.i(TAG, "Navigating up in Photos")
@@ -920,16 +660,18 @@ class KrakenAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Quick delete - click trash button, then confirm deletion
-     * Note: Controls are already visible when entering single-photo view from gallery
+     * Quick delete: click trash, wait for confirmation dialog, click confirm.
+     * Both clicks are routed through the vendor adapter for the foreground
+     * gallery; the timing/retry orchestration around them is vendor-neutral.
      */
     fun dispatchQuickDelete() {
         Log.i(TAG, "Quick delete: trash -> confirm")
+        val adapter = currentAdapter()
 
         // Small delay to ensure controls are stable before clicking trash
         handler.postDelayed({
             Log.i(TAG, "Step 1: Clicking trash button")
-            val trashClicked = clickTrashButton()
+            val trashClicked = adapter.clickTrash(this)
             if (!trashClicked) {
                 Log.w(TAG, "Trash click failed — aborting delete sequence")
                 return@postDelayed
@@ -939,69 +681,23 @@ class KrakenAccessibilityService : AccessibilityService() {
             // On slow devices the dialog may not be accessible yet; retry once after 600ms.
             handler.postDelayed({
                 Log.i(TAG, "Step 2: Confirming deletion")
-                val confirmed = clickConfirmDelete()
+                val confirmed = adapter.clickConfirmDelete(this)
                 if (!confirmed) {
                     handler.postDelayed({
                         Log.w(TAG, "Step 2 retry: confirm dialog not ready on first attempt")
-                        clickConfirmDelete()
+                        adapter.clickConfirmDelete(this)
                     }, 600)
                 }
             }, 1500)
         }, 200)
     }
-    
+
     /**
-     * Switch between photo and video modes in Google Camera
-     * @param toVideo true = switch to video mode, false = switch to photo mode
+     * Switch between photo and video modes. Delegated to the vendor adapter
+     * for the currently foreground camera app.
      */
     fun dispatchModeSwipeGesture(toVideo: Boolean) {
-        val targetMode = if (toVideo) "video" else "photo"
-        val resourceId = if (toVideo) "video_supermode" else "camera_supermode"
-
-        Log.i(TAG, "Switching to $targetMode mode")
-
-        // Strategy 1: Content description – stable across Google Camera versions
-        // Use exact match to avoid "Photo gallery" inadvertently matching "photo"
-        var node: AccessibilityNodeInfo? = if (toVideo) {
-            findNodeByContentDescription("Video", exactMatch = true)
-        } else {
-            findNodeByContentDescription("Photo", exactMatch = true)
-                ?: findNodeByContentDescription("Camera", exactMatch = true)
-        }
-
-        // Strategy 2: Resource ID – version-specific fallback (Google Camera stable IDs)
-        if (node == null) {
-            node = findNodeByResourceId(resourceId)
-            if (node != null) Log.d(TAG, "Found $targetMode toggle by resource ID: $resourceId")
-        }
-
-        if (node != null) {
-            // Check if already in the target mode (node is checked/selected)
-            if (node.isChecked) {
-                Log.i(TAG, "Already in $targetMode mode, no action needed")
-                return
-            }
-
-            // Try to click the node directly
-            if (!clickNode(node)) {
-                // If direct click fails, try tapping at node's center coordinates
-                getNodeCenter(node)?.let { (x, y) ->
-                    Log.i(TAG, "Direct click failed, tapping $targetMode toggle at ($x, $y)")
-                    dispatchTap(x, y)
-                }
-            }
-        } else {
-            // Last resort fallback: use hardcoded coordinates
-            Log.w(TAG, "Could not find $targetMode mode toggle, using fallback coordinates")
-            val y = screenHeight * 0.92f  // Bottom mode bar
-            val x: Float = if (toVideo) {
-                screenWidth * 0.55f  // Video is right of center
-            } else {
-                screenWidth * 0.45f  // Photo is left of center
-            }
-            Log.i(TAG, "Tapping $targetMode icon at fallback position ($x, $y)")
-            dispatchTap(x, y)
-        }
+        currentAdapter().modeSwitch(this, toVideo)
     }
     
     private fun broadcastServiceStatus() {

@@ -231,9 +231,15 @@ lives only on the maintainer's machine and in CI as a base64 secret.
 app/src/main/java/ch/fbc/krakenbridge/
    MainActivity.kt              — Compose host + permission walkthrough
    KrakenBleService.kt          — BLE foreground service
-   KrakenAccessibilityService.kt — key/gesture injection
+   KrakenAccessibilityService.kt — key/gesture injection (vendor-neutral
+                                   helpers + delegation to vendor adapters)
    KrakenWakeActivity.kt        — screen wake (transparent, no UI)
    KrakenScreenOverlayManager.kt — keep-screen-on overlay + idle dimmer
+   vendor/
+     VendorAdapter.kt           — interface + VendorRegistry; one adapter
+                                   per camera/gallery vendor whose UI we
+                                   automate (shutter, mode switch, delete)
+     StockAndroidAdapter.kt     — Google Camera + Google Photos heuristics
    ui/
      MainScreen.kt              — Compose home (status hero + Connect CTA)
      PermissionScreen.kt        — single-CTA walkthrough screen
@@ -323,11 +329,21 @@ order of impact when the next session has a fresh head.
    `ActivityManager.getRunningAppProcesses` polling for the camera
    package, then finish.
 
-6. **Hardcoded `com.google.android.GoogleCamera` and
-   `com.google.android.apps.photos`.** Breaks on non-Pixel phones,
-   which is half the Android market. Make the camera + gallery
-   package configurable (preference + fallback to ACTION_IMAGE_CAPTURE
-   resolver).
+6. **Vendor compatibility — accessibility layer.** Intent-launch layer
+   was de-Googled in 2026-05: `openCamera()` uses
+   `MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA` (no `setPackage`) and
+   `openPhotosApp()` drops `setPackage` entirely, so the user's chosen
+   default camera/gallery opens on every BLE button press. The
+   accessibility-automation layer (shutter tap, photo↔video mode
+   switch, delete sequence) is now organised as one `VendorAdapter`
+   per vendor in `vendor/`, dispatched from
+   `KrakenAccessibilityService` based on the foreground package. Only
+   `StockAndroidAdapter` (Google Camera + Photos) ships today; a
+   `SamsungAdapter` is the next step once a real Samsung device is
+   available to capture accessibility-tree dumps for shutter, mode
+   carousel, and Samsung Gallery delete/overflow nodes. Don't guess
+   Samsung resource IDs or coordinates from desk research — wait for
+   the dump.
 
 7. **No JVM unit tests.** Button code parsing (high/low nibble),
    debounce window, camera/gallery mode toggle, video-recording state

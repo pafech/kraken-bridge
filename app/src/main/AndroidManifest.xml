@@ -41,6 +41,26 @@
 
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true"/>
 
+    <!-- Android 11+ package visibility. Without these <queries>, startActivity()
+         silently fails because the system filters out any package the app cannot
+         "see". We need to resolve:
+         - the default camera app (STILL_IMAGE_CAMERA) on shutter press,
+         - the default gallery app (ACTION_VIEW with image/* and video/*) when
+           the back button opens the latest capture. -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.STILL_IMAGE_CAMERA"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:mimeType="image/*"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:mimeType="video/*"/>
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
