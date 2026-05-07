@@ -771,7 +771,8 @@ class KrakenBleService : Service() {
     /**
      * Query MediaStore for the most recently added image or video.
      * Returns the content URI and MIME type, or null if nothing is found.
-     * The MIME type is required for Google Photos to open in single-item view.
+     * The MIME type is required so ACTION_VIEW resolves to a gallery viewer
+     * that can render the URI directly in single-item view.
      */
     private fun queryLatestMedia(): Pair<Uri, String>? {
         val collection = MediaStore.Files.getContentUri("external")

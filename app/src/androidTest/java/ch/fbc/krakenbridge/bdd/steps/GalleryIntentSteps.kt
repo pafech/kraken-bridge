@@ -78,10 +78,11 @@ class GalleryIntentSteps {
         queryLatestMedia()
         val result = queryResult ?: return
         val (uri, mimeType) = result
+        // Mirrors KrakenBleService.openPhotosApp(): no setPackage so the system
+        // resolves the user's default gallery app.
         constructedIntent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, mimeType)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            setPackage("com.google.android.apps.photos")
         }
     }
 
@@ -120,10 +121,14 @@ class GalleryIntentSteps {
         assertNotNull("Intent MIME type is null", constructedIntent!!.type)
     }
 
-    @Then("the intent package is {string}")
-    fun assertIntentPackage(expectedPackage: String) {
+    @Then("the intent has no package set")
+    fun assertIntentHasNoPackage() {
         assertNotNull("No intent constructed", constructedIntent)
-        assertEquals(expectedPackage, constructedIntent!!.`package`)
+        assertEquals(
+            "Intent should have no package so the system default resolves",
+            null,
+            constructedIntent!!.`package`
+        )
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

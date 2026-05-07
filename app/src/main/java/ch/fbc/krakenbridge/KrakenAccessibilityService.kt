@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Path
-import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.media.AudioManager
 import android.os.Build
@@ -93,7 +92,7 @@ class KrakenAccessibilityService : AccessibilityService() {
         }
         
         // If not found, try recursive search for partial/short resource IDs
-        // (Google Camera uses short IDs like "camera_supermode" without package prefix)
+        // (some apps use short IDs like "camera_supermode" without package prefix)
         val node = findNodeByResourceIdRecursive(root, resourceId)
         if (node != null) {
             Log.d(TAG, "Found node with short resource ID: $resourceId")
@@ -179,8 +178,9 @@ class KrakenAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Debug: Dump the accessibility tree to logcat
-     * Run this when viewing a photo in Google Photos to discover the trash button's actual identifiers
+     * Debug: dump the accessibility tree to logcat. Run this from any foreground
+     * camera or gallery (single-photo view, overflow opened, etc.) to discover
+     * the actual node identifiers a future vendor adapter needs.
      */
     fun dumpAccessibilityTree() {
         val root = rootInActiveWindow
@@ -590,7 +590,10 @@ class KrakenAccessibilityService : AccessibilityService() {
         }, null)
     }
     /**
-     * Swipe left/right to navigate photos in Google Photos
+     * Swipe left/right to navigate photos in the foreground gallery.
+     * Vendor-neutral coordinate gesture — works against any single-photo viewer
+     * that uses a horizontal photo carousel.
+     *
      * @param next true = swipe left (next photo), false = swipe right (previous photo)
      */
     fun dispatchGallerySwipe(next: Boolean) {
@@ -637,26 +640,6 @@ class KrakenAccessibilityService : AccessibilityService() {
     private fun currentAdapter(): VendorAdapter {
         val pkg = rootInActiveWindow?.packageName?.toString()
         return VendorRegistry.adapterFor(pkg)
-    }
-
-    /**
-     * Navigate back/up in the foreground gallery (e.g. return to grid view).
-     * Vendor-neutral: tries a generic "Navigate up" content description first,
-     * then falls back to the system back action.
-     */
-    fun navigateUpInPhotos(): Boolean {
-        Log.i(TAG, "Navigating up in Photos")
-
-        // Try to find the navigate up button by content description
-        var node = findNodeByContentDescription("Navigate up", exactMatch = false)
-
-        if (node != null) {
-            return clickNode(node)
-        } else {
-            Log.w(TAG, "Could not find navigate up button, using BACK action")
-            performGlobalAction(GLOBAL_ACTION_BACK)
-            return true
-        }
     }
 
     /**

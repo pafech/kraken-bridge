@@ -22,19 +22,19 @@
 <body>
 
 <h1>Kraken Dive Photo - Privacy Policy</h1>
-<p class="updated">Last updated: 12 April 2026</p>
+<p class="updated">Last updated: 7 May 2026</p>
 
 <h2>Summary</h2>
 <p>Kraken Dive Photo does not collect, store, or transmit any personal data. The app runs entirely on your device.</p>
 
 <h2>What the app does</h2>
-<p>Kraken Dive Photo connects to a Kraken dive housing via Bluetooth Low Energy (BLE) and translates button presses into camera actions on your phone. It interacts with Google Camera and Google Photos on your behalf using Android's accessibility service.</p>
+<p>Kraken Dive Photo connects to a Kraken dive housing via Bluetooth Low Energy (BLE) and translates button presses into camera actions on your phone. It launches whichever camera and gallery apps you have set as your device defaults (e.g. Google Camera and Google Photos on Pixel, Samsung Camera and Samsung Gallery on Galaxy) and interacts with them on your behalf using Android's accessibility service.</p>
 
 <h2>Data handling</h2>
 <ul>
   <li><strong>Bluetooth:</strong> The app stores the MAC address of your last connected Kraken housing on the device (in SharedPreferences) so it can reconnect automatically. This data never leaves your device.</li>
-  <li><strong>Photos and videos:</strong> The app queries Android's MediaStore to find your most recent capture and open it in Google Photos. It does not read, copy, upload, or modify your photos or videos.</li>
-  <li><strong>Accessibility service:</strong> The accessibility service injects tap gestures and key events into Google Camera and Google Photos. It does not read, log, or transmit any screen content, text, or user interface data from any app.</li>
+  <li><strong>Photos and videos:</strong> The app queries Android's MediaStore to find your most recent capture and open it in your default gallery app. It does not read, copy, upload, or modify your photos or videos.</li>
+  <li><strong>Accessibility service:</strong> The accessibility service injects tap gestures and key events into your default camera and gallery apps. It does not read, log, or transmit any screen content, text, or user interface data from any app.</li>
   <li><strong>Network:</strong> The app does not make any network requests. It has no internet permission and no server-side component.</li>
   <li><strong>Analytics:</strong> None. No crash reporting, no usage tracking, no telemetry.</li>
 </ul>
