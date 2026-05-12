@@ -1,5 +1,8 @@
 package ch.fbc.krakenbridge.vendor
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
@@ -93,6 +96,33 @@ object StockAndroidAdapter : VendorAdapter {
         val x: Float = if (toVideo) svc.screenWidth * 0.55f else svc.screenWidth * 0.45f
         Log.i(TAG, "Tapping $targetMode icon at fallback position ($x, $y)")
         svc.dispatchTap(x, y)
+    }
+
+    /**
+     * Google Photos auto-loads surrounding gallery context when launched
+     * with `ACTION_VIEW` on a single MediaStore URI, so the diver can
+     * swipe through the rest of the camera roll right away. No follow-up
+     * tap is needed; we just fire the intent and return.
+     */
+    override fun openGallery(
+        ctx: Context,
+        svc: KrakenAccessibilityService?,
+        latest: Pair<Uri, String>?
+    ): Boolean {
+        if (latest == null) return false
+        val (uri, mimeType) = latest
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            ctx.startActivity(intent)
+            Log.i(TAG, "Opened $uri ($mimeType) in default gallery")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "No viewer available for $uri: ${e.message}")
+            false
+        }
     }
 
     /**

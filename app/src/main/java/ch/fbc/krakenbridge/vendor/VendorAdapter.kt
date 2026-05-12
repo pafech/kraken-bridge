@@ -1,5 +1,7 @@
 package ch.fbc.krakenbridge.vendor
 
+import android.content.Context
+import android.net.Uri
 import ch.fbc.krakenbridge.KrakenAccessibilityService
 
 /**
@@ -47,6 +49,24 @@ interface VendorAdapter {
      * dialog after the trash button has been tapped.
      */
     fun clickConfirmDelete(svc: KrakenAccessibilityService): Boolean
+
+    /**
+     * Open the user's gallery from a non-gallery foreground (typically the
+     * camera) so the diver can review captures. Each vendor decides the
+     * landing strategy — what matters is that the diver ends up in a
+     * single-photo viewer with surrounding context, so the BLE swipe
+     * buttons can navigate to other recent captures.
+     *
+     * @param latest (uri, mimeType) of the most-recent media item per
+     *   MediaStore, or null if the store is empty / inaccessible.
+     * @return true if a launch was dispatched, false to let the caller
+     *   handle partial-access fallbacks.
+     */
+    fun openGallery(
+        ctx: Context,
+        svc: KrakenAccessibilityService?,
+        latest: Pair<Uri, String>?
+    ): Boolean
 }
 
 /**
@@ -58,7 +78,8 @@ interface VendorAdapter {
 object VendorRegistry {
 
     private val adapters: List<VendorAdapter> = listOf(
-        StockAndroidAdapter
+        StockAndroidAdapter,
+        SamsungAdapter
     )
 
     fun adapterFor(packageName: String?): VendorAdapter {

@@ -90,7 +90,7 @@ class KrakenAccessibilityService : AccessibilityService() {
             Log.d(TAG, "Found node with resource ID: $resourceId")
             return nodes[0]
         }
-        
+
         // If not found, try recursive search for partial/short resource IDs
         // (some apps use short IDs like "camera_supermode" without package prefix)
         val node = findNodeByResourceIdRecursive(root, resourceId)
@@ -98,9 +98,20 @@ class KrakenAccessibilityService : AccessibilityService() {
             Log.d(TAG, "Found node with short resource ID: $resourceId")
             return node
         }
-        
+
         Log.w(TAG, "No node found with resource ID: $resourceId")
         return null
+    }
+
+    /**
+     * Return every node matching [resourceId] (full `package:id/name` form
+     * only — short IDs are not supported). Useful when a recycler exposes
+     * many siblings sharing the same id and the caller needs to filter by
+     * bounds or other attributes.
+     */
+    internal fun findNodesByResourceId(resourceId: String): List<AccessibilityNodeInfo> {
+        val root = rootInActiveWindow ?: return emptyList()
+        return root.findAccessibilityNodeInfosByViewId(resourceId) ?: emptyList()
     }
     
     /**
@@ -574,18 +585,45 @@ class KrakenAccessibilityService : AccessibilityService() {
         val path = Path().apply {
             moveTo(x, y)
         }
-        
+
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0, 50))
             .build()
-        
+
         dispatchGesture(gesture, object : GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription?) {
                 Log.i(TAG, "Tap gesture completed at ($x, $y)")
             }
-            
+
             override fun onCancelled(gestureDescription: GestureDescription?) {
                 Log.w(TAG, "Tap gesture cancelled")
+            }
+        }, null)
+    }
+
+    internal fun dispatchSwipe(
+        startX: Float,
+        startY: Float,
+        endX: Float,
+        endY: Float,
+        durationMs: Long
+    ) {
+        val path = Path().apply {
+            moveTo(startX, startY)
+            lineTo(endX, endY)
+        }
+
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, durationMs))
+            .build()
+
+        dispatchGesture(gesture, object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                Log.i(TAG, "Swipe completed ($startX,$startY)→($endX,$endY) in ${durationMs}ms")
+            }
+
+            override fun onCancelled(gestureDescription: GestureDescription?) {
+                Log.w(TAG, "Swipe cancelled ($startX,$startY)→($endX,$endY)")
             }
         }, null)
     }
@@ -598,37 +636,10 @@ class KrakenAccessibilityService : AccessibilityService() {
      */
     fun dispatchGallerySwipe(next: Boolean) {
         val y = screenHeight * 0.5f
-        val startX: Float
-        val endX: Float
-        
-        if (next) {
-            // Swipe left to see next photo
-            startX = screenWidth * 0.8f
-            endX = screenWidth * 0.2f
-        } else {
-            // Swipe right to see previous photo
-            startX = screenWidth * 0.2f
-            endX = screenWidth * 0.8f
-        }
-        
-        val path = Path().apply {
-            moveTo(startX, y)
-            lineTo(endX, y)
-        }
-        
-        val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, 200))
-            .build()
-        
-        dispatchGesture(gesture, object : GestureResultCallback() {
-            override fun onCompleted(gestureDescription: GestureDescription?) {
-                Log.i(TAG, "Gallery swipe completed (next=$next)")
-            }
-            
-            override fun onCancelled(gestureDescription: GestureDescription?) {
-                Log.w(TAG, "Gallery swipe cancelled")
-            }
-        }, null)
+        val startX = if (next) screenWidth * 0.8f else screenWidth * 0.2f
+        val endX = if (next) screenWidth * 0.2f else screenWidth * 0.8f
+        Log.i(TAG, "Gallery swipe (next=$next)")
+        dispatchSwipe(startX, y, endX, y, durationMs = 200L)
     }
     
     /**
