@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.*
@@ -22,6 +23,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import ch.fbc.krakenbridge.vendor.VendorRegistry
 import java.util.*
 
 /**
@@ -737,35 +739,43 @@ class KrakenBleService : Service() {
     }
     
     /**
-     * Open the most recent photo or video directly in single-item view.
-     * Queries MediaStore for the newest media file and opens it with ACTION_VIEW,
-     * which lands the user straight in the single-photo/video viewer — no grid
-     * navigation or accessibility tapping needed.
+     * Open the user's default gallery so the diver can review captures.
+     * Strategy is vendor-specific: Google Photos accepts a single MediaStore
+     * URI and auto-loads surrounding context; Samsung Gallery's external
+     * single-view does not, so the SamsungAdapter takes a different route.
+     * Resolution is by the OS's default image-viewer package, not the
+     * camera package — the two can be different vendors on the same device.
      */
     private fun openPhotosApp() {
         val latest = queryLatestMedia()
-        if (latest != null) {
-            val (uri, mimeType) = latest
-            try {
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(uri, mimeType)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(intent)
-                Log.i(TAG, "Opened latest media in default gallery: $uri ($mimeType)")
-                return
-            } catch (e: Exception) {
-                Log.e(TAG, "No viewer available for $uri: ${e.message}")
-            }
-        } else {
-            if (hasPartialMediaAccess()) {
-                Log.w(TAG, "Partial media access detected — MediaStore returned empty")
-                broadcastStatus("ready", "Limited photo access — grant full access in app settings")
-                openAppSettings()
-                return
-            }
-            Log.w(TAG, "No media found on device — nothing to open")
+        val galleryPkg = resolveDefaultGalleryPackage()
+        val adapter = VendorRegistry.adapterFor(galleryPkg)
+
+        val opened = adapter.openGallery(
+            ctx = this,
+            svc = KrakenAccessibilityService.instance,
+            latest = latest
+        )
+        if (opened) {
+            Log.i(TAG, "Gallery launched via ${adapter::class.simpleName} (pkg=$galleryPkg)")
+            return
         }
+
+        if (latest == null && hasPartialMediaAccess()) {
+            Log.w(TAG, "Partial media access detected — MediaStore returned empty")
+            broadcastStatus("ready", "Limited photo access — grant full access in app settings")
+            openAppSettings()
+            return
+        }
+        Log.w(TAG, "Could not open gallery (pkg=$galleryPkg, latest=$latest)")
+    }
+
+    private fun resolveDefaultGalleryPackage(): String? {
+        val probe = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType("content://media/external/images/media/1".toUri(), "image/*")
+        }
+        return packageManager.resolveActivity(probe, PackageManager.MATCH_DEFAULT_ONLY)
+            ?.activityInfo?.packageName
     }
 
     /**

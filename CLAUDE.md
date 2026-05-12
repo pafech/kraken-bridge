@@ -2,9 +2,9 @@
 
 Android app that turns a Kraken dive housing's BLE button remote into a
 camera + gallery controller for the phone's default camera and gallery
-apps. Stock-Android (Google Camera + Photos) is fully tuned today;
-Samsung (Camera + Gallery) is the next vendor adapter once a real
-Galaxy device is available for accessibility-tree capture. The phone
+apps. Two vendor adapters ship today: Stock-Android (Google Camera +
+Photos) tuned against the Pixel build, and Samsung (Samsung Camera +
+Samsung Gallery) tuned against One UI 5.1 on a Galaxy S20+. The phone
 is sealed inside the housing during a dive, so every interaction must
 work without touching the screen.
 
@@ -243,6 +243,7 @@ app/src/main/java/ch/fbc/krakenbridge/
                                    per camera/gallery vendor whose UI we
                                    automate (shutter, mode switch, delete)
      StockAndroidAdapter.kt     — Google Camera + Google Photos heuristics
+     SamsungAdapter.kt          — Samsung Camera + Samsung Gallery heuristics
    ui/
      MainScreen.kt              — Compose home (status hero + Connect CTA)
      PermissionScreen.kt        — single-CTA walkthrough screen
@@ -338,15 +339,18 @@ order of impact when the next session has a fresh head.
    `openPhotosApp()` drops `setPackage` entirely, so the user's chosen
    default camera/gallery opens on every BLE button press. The
    accessibility-automation layer (shutter tap, photo↔video mode
-   switch, delete sequence) is now organised as one `VendorAdapter`
-   per vendor in `vendor/`, dispatched from
-   `KrakenAccessibilityService` based on the foreground package. Only
-   `StockAndroidAdapter` (Google Camera + Photos) ships today; a
-   `SamsungAdapter` is the next step once a real Samsung device is
-   available to capture accessibility-tree dumps for shutter, mode
-   carousel, and Samsung Gallery delete/overflow nodes. Don't guess
-   Samsung resource IDs or coordinates from desk research — wait for
-   the dump.
+   switch, delete sequence) is organised as one `VendorAdapter` per
+   vendor in `vendor/`, dispatched from `KrakenAccessibilityService`
+   based on the foreground package. Two adapters ship today:
+   `StockAndroidAdapter` (Google Camera + Photos) and `SamsungAdapter`
+   (Samsung Camera + Samsung Gallery, captured against One UI 5.1 on a
+   Galaxy S20+). Source dumps live under
+   `docs/vendor-dumps/samsung/`. For a new vendor: capture the
+   accessibility tree on a real device first (six states: camera
+   photo-idle, camera video-idle, mode carousel, gallery single-photo,
+   delete confirm dialog, and overflow if applicable), then write the
+   adapter from those dumps. Don't guess resource IDs or coordinates
+   from desk research.
 
 7. **No JVM unit tests.** Button code parsing (high/low nibble),
    debounce window, camera/gallery mode toggle, video-recording state
