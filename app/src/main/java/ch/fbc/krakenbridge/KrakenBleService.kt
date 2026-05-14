@@ -113,6 +113,13 @@ class KrakenBleService : Service() {
     private lateinit var prefs: SharedPreferences
     private lateinit var featureRepo: FeatureRepository
     @Volatile private var features: Features = Features.CameraOnly
+
+    // Packages that can handle STILL_IMAGE_CAMERA — used to detect when the
+    // foreground is something else (e.g. our own MainActivity) so a button
+    // press can refocus the camera instead of being dispatched into the
+    // wrong app's accessibility tree. Resolved once in onCreate; install /
+    // uninstall of a camera app mid-session is an edge case we don't handle.
+    @Volatile private var cameraPackages: Set<String> = emptySet()
     
     // Wake lock to keep device awake while connected
     private var wakeLock: PowerManager.WakeLock? = null
@@ -332,6 +339,7 @@ class KrakenBleService : Service() {
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         featureRepo = FeatureRepository(this)
         overlayManager = KrakenScreenOverlayManager(this)
+        cameraPackages = resolveCameraPackages()
 
         val screenFilter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
@@ -639,9 +647,32 @@ class KrakenBleService : Service() {
             // Gallery mode: navigate and manage photos
             handleGalleryButton(code)
         } else {
-            // Camera mode: take photos/videos
+            // Camera mode: if the diver navigated away from the camera (e.g.
+            // opened MainActivity to check status during a reconnect), the
+            // injected tap would land in the wrong app's accessibility tree
+            // and the press would silently do nothing. Bring the camera
+            // back to the front and swallow this press — the next one
+            // dispatches normally.
+            if (cameraIsOpen && !isCameraForeground()) {
+                Log.i(TAG, "Button 0x${code.toString(16)} -> camera not foreground, refocusing")
+                openCamera()
+                return
+            }
             handleCameraButton(code)
         }
+    }
+
+    private fun resolveCameraPackages(): Set<String> {
+        val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
+        return packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            .map { it.activityInfo.packageName }
+            .toSet()
+    }
+
+    private fun isCameraForeground(): Boolean {
+        val foreground = KrakenAccessibilityService.instance?.currentForegroundPackage
+            ?: return false
+        return foreground in cameraPackages
     }
     
     private fun handleCameraButton(code: Int) {
