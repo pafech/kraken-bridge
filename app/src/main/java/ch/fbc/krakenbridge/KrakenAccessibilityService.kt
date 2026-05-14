@@ -73,10 +73,26 @@ class KrakenAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Find an AccessibilityNodeInfo by resource ID
-     * Supports both full IDs ("vendor.package:id/some_button")
-     * and short IDs ("camera_supermode")
-     * @return The first matching node, or null if not found
+     * Depth-first traversal that returns the first node satisfying [predicate],
+     * or null if no node matches. Every `findNodeBy*` helper in this file
+     * funnels through here so the recursion only lives in one place.
+     */
+    private fun findNode(
+        node: AccessibilityNodeInfo?,
+        predicate: (AccessibilityNodeInfo) -> Boolean
+    ): AccessibilityNodeInfo? {
+        if (node == null) return null
+        if (predicate(node)) return node
+        for (i in 0 until node.childCount) {
+            findNode(node.getChild(i), predicate)?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * Find an AccessibilityNodeInfo by resource ID.
+     * Supports both full IDs ("vendor.package:id/some_button") and short IDs
+     * ("camera_supermode") — short IDs trigger a fallback recursive search.
      */
     internal fun findNodeByResourceId(resourceId: String): AccessibilityNodeInfo? {
         val root = rootInActiveWindow ?: run {
@@ -91,9 +107,11 @@ class KrakenAccessibilityService : AccessibilityService() {
             return nodes[0]
         }
 
-        // If not found, try recursive search for partial/short resource IDs
-        // (some apps use short IDs like "camera_supermode" without package prefix)
-        val node = findNodeByResourceIdRecursive(root, resourceId)
+        // Fallback: short-ID match (some apps use "camera_supermode" without prefix)
+        val node = findNode(root) { n ->
+            val id = n.viewIdResourceName ?: return@findNode false
+            id == resourceId || id.endsWith("/$resourceId") || id.endsWith(":$resourceId")
+        }
         if (node != null) {
             Log.d(TAG, "Found node with short resource ID: $resourceId")
             return node
@@ -113,79 +131,24 @@ class KrakenAccessibilityService : AccessibilityService() {
         val root = rootInActiveWindow ?: return emptyList()
         return root.findAccessibilityNodeInfosByViewId(resourceId) ?: emptyList()
     }
-    
-    /**
-     * Recursively search for a node by resource ID (partial match for short IDs)
-     */
-    private fun findNodeByResourceIdRecursive(node: AccessibilityNodeInfo?, resourceId: String): AccessibilityNodeInfo? {
-        if (node == null) return null
-        
-        val nodeResId = node.viewIdResourceName
-        if (nodeResId != null) {
-            // Match full ID or just the name part after the last /
-            if (nodeResId == resourceId || nodeResId.endsWith("/$resourceId") || nodeResId.endsWith(":$resourceId")) {
-                return node
-            }
-        }
-        
-        // Search children
-        for (i in 0 until node.childCount) {
-            val result = findNodeByResourceIdRecursive(node.getChild(i), resourceId)
-            if (result != null) return result
-        }
-        
-        return null
-    }
 
     /**
-     * Find an AccessibilityNodeInfo by content description
-     * @param contentDesc The content description to search for
-     * @param exactMatch If true, requires exact match; if false, uses contains matching
-     * @return The first matching node, or null if not found
+     * Find an AccessibilityNodeInfo by content description.
+     * @param exactMatch true = equality; false = case-insensitive contains.
      */
-    internal fun findNodeByContentDescription(contentDesc: String, exactMatch: Boolean = false): AccessibilityNodeInfo? {
+    internal fun findNodeByContentDescription(
+        contentDesc: String,
+        exactMatch: Boolean = false
+    ): AccessibilityNodeInfo? {
         val root = rootInActiveWindow ?: run {
             Log.w(TAG, "No active window root")
             return null
         }
-
-        return findNodeByContentDescriptionRecursive(root, contentDesc, exactMatch)
-    }
-
-    /**
-     * Recursively search for a node by content description
-     */
-    private fun findNodeByContentDescriptionRecursive(
-        node: AccessibilityNodeInfo?,
-        contentDesc: String,
-        exactMatch: Boolean
-    ): AccessibilityNodeInfo? {
-        if (node == null) return null
-
-        val nodeContentDesc = node.contentDescription?.toString()
-        if (nodeContentDesc != null) {
-            val matches = if (exactMatch) {
-                nodeContentDesc == contentDesc
-            } else {
-                nodeContentDesc.contains(contentDesc, ignoreCase = true)
-            }
-
-            if (matches) {
-                Log.d(TAG, "Found node with content description: $nodeContentDesc")
-                return node
-            }
-        }
-
-        // Search children
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i)
-            val result = findNodeByContentDescriptionRecursive(child, contentDesc, exactMatch)
-            if (result != null) {
-                return result
-            }
-        }
-
-        return null
+        return findNode(root) { n ->
+            val desc = n.contentDescription?.toString() ?: return@findNode false
+            if (exactMatch) desc == contentDesc
+            else desc.contains(contentDesc, ignoreCase = true)
+        }?.also { Log.d(TAG, "Found node with content description: ${it.contentDescription}") }
     }
 
     /**
@@ -238,8 +201,8 @@ class KrakenAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Find a clickable node by class type in a specific screen region
-     * Useful for finding buttons in the bottom action bar
+     * Find a clickable node in a screen region, optionally constrained by class name.
+     * Useful for finding buttons in the bottom action bar by position.
      */
     internal fun findClickableInRegion(
         minX: Float, maxX: Float,
@@ -247,79 +210,31 @@ class KrakenAccessibilityService : AccessibilityService() {
         className: String? = null
     ): AccessibilityNodeInfo? {
         val root = rootInActiveWindow ?: return null
-        return findClickableInRegionRecursive(root, minX, maxX, minY, maxY, className)
-    }
-
-    private fun findClickableInRegionRecursive(
-        node: AccessibilityNodeInfo?,
-        minX: Float, maxX: Float,
-        minY: Float, maxY: Float,
-        className: String?
-    ): AccessibilityNodeInfo? {
-        if (node == null) return null
-
-        val rect = Rect()
-        node.getBoundsInScreen(rect)
-        val centerX = rect.exactCenterX()
-        val centerY = rect.exactCenterY()
-
-        // Check if node is in the target region
-        if (centerX >= minX && centerX <= maxX && centerY >= minY && centerY <= maxY) {
-            val nodeClassName = node.className?.toString()
-            val matchesClass = className == null || nodeClassName?.contains(className, ignoreCase = true) == true
-            
-            if (node.isClickable && matchesClass) {
-                Log.d(TAG, "Found clickable in region: class=$nodeClassName, " +
-                        "desc=${node.contentDescription}, id=${node.viewIdResourceName}, bounds=$rect")
-                return node
-            }
+        return findNode(root) { n ->
+            if (!n.isClickable) return@findNode false
+            val rect = Rect()
+            n.getBoundsInScreen(rect)
+            if (rect.exactCenterX() !in minX..maxX) return@findNode false
+            if (rect.exactCenterY() !in minY..maxY) return@findNode false
+            className == null || n.className?.toString()?.contains(className, ignoreCase = true) == true
+        }?.also {
+            val rect = Rect().also { r -> it.getBoundsInScreen(r) }
+            Log.d(TAG, "Found clickable in region: class=${it.className}, " +
+                    "desc=${it.contentDescription}, id=${it.viewIdResourceName}, bounds=$rect")
         }
-
-        // Search children
-        for (i in 0 until node.childCount) {
-            val result = findClickableInRegionRecursive(node.getChild(i), minX, maxX, minY, maxY, className)
-            if (result != null) return result
-        }
-
-        return null
     }
 
     /**
-     * Find a node by its text content
+     * Find a node by its text content.
+     * @param exactMatch true = equality; false = case-insensitive contains.
      */
     internal fun findNodeByText(text: String, exactMatch: Boolean = false): AccessibilityNodeInfo? {
         val root = rootInActiveWindow ?: return null
-        return findNodeByTextRecursive(root, text, exactMatch)
-    }
-
-    private fun findNodeByTextRecursive(
-        node: AccessibilityNodeInfo?,
-        text: String,
-        exactMatch: Boolean
-    ): AccessibilityNodeInfo? {
-        if (node == null) return null
-
-        val nodeText = node.text?.toString()
-        if (nodeText != null) {
-            val matches = if (exactMatch) {
-                nodeText == text
-            } else {
-                nodeText.contains(text, ignoreCase = true)
-            }
-
-            if (matches) {
-                Log.d(TAG, "Found node with text: $nodeText")
-                return node
-            }
-        }
-
-        // Search children
-        for (i in 0 until node.childCount) {
-            val result = findNodeByTextRecursive(node.getChild(i), text, exactMatch)
-            if (result != null) return result
-        }
-
-        return null
+        return findNode(root) { n ->
+            val nodeText = n.text?.toString() ?: return@findNode false
+            if (exactMatch) nodeText == text
+            else nodeText.contains(text, ignoreCase = true)
+        }?.also { Log.d(TAG, "Found node with text: ${it.text}") }
     }
 
     /**
@@ -347,30 +262,19 @@ class KrakenAccessibilityService : AccessibilityService() {
         minY: Float, maxY: Float
     ): List<AccessibilityNodeInfo> {
         val result = mutableListOf<AccessibilityNodeInfo>()
-        collectInto(node, minX, maxX, minY, maxY, result)
+        fun visit(n: AccessibilityNodeInfo?) {
+            if (n == null) return
+            if (n.isClickable) {
+                val rect = Rect()
+                n.getBoundsInScreen(rect)
+                if (rect.exactCenterX() in minX..maxX && rect.exactCenterY() in minY..maxY) {
+                    result.add(n)
+                }
+            }
+            for (i in 0 until n.childCount) visit(n.getChild(i))
+        }
+        visit(node)
         return result
-    }
-
-    private fun collectInto(
-        node: AccessibilityNodeInfo?,
-        minX: Float, maxX: Float,
-        minY: Float, maxY: Float,
-        out: MutableList<AccessibilityNodeInfo>
-    ) {
-        if (node == null) return
-
-        val rect = Rect()
-        node.getBoundsInScreen(rect)
-        val centerX = rect.exactCenterX()
-        val centerY = rect.exactCenterY()
-
-        if (centerX in minX..maxX && centerY in minY..maxY && node.isClickable) {
-            out.add(node)
-        }
-
-        for (i in 0 until node.childCount) {
-            collectInto(node.getChild(i), minX, maxX, minY, maxY, out)
-        }
     }
 
     /**
