@@ -816,13 +816,14 @@ class KrakenBleService : Service() {
      */
     private fun openPhotosApp() {
         val latest = queryLatestMedia()
-        val galleryPkg = resolveDefaultGalleryPackage()
+        val galleryPkg = resolveDefaultGalleryPackage(latest)
         val adapter = VendorRegistry.adapterFor(galleryPkg)
 
         val opened = adapter.openGallery(
             ctx = this,
             svc = KrakenAccessibilityService.instance,
-            latest = latest
+            latest = latest,
+            targetPackage = galleryPkg
         )
         if (opened) {
             Log.i(TAG, "Gallery launched via ${adapter::class.simpleName} (pkg=$galleryPkg)")
@@ -838,9 +839,18 @@ class KrakenBleService : Service() {
         Log.w(TAG, "Could not open gallery (pkg=$galleryPkg, latest=$latest)")
     }
 
-    private fun resolveDefaultGalleryPackage(): String? {
+    /**
+     * Resolve the user's preferred viewer for the latest media's MIME type.
+     * Probing with the actual MIME (image vs video) matters because the
+     * image viewer set as default may not handle video — in which case
+     * launching with no setPackage shows a chooser dialog. Falls back to
+     * an image probe when no media exists yet.
+     */
+    private fun resolveDefaultGalleryPackage(latest: Pair<Uri, String>?): String? {
+        val (probeUri, probeMime) = latest
+            ?: ("content://media/external/images/media/1".toUri() to "image/*")
         val probe = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType("content://media/external/images/media/1".toUri(), "image/*")
+            setDataAndType(probeUri, probeMime)
         }
         return packageManager.resolveActivity(probe, PackageManager.MATCH_DEFAULT_ONLY)
             ?.activityInfo?.packageName

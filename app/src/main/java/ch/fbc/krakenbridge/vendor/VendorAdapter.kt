@@ -59,13 +59,20 @@ interface VendorAdapter {
      *
      * @param latest (uri, mimeType) of the most-recent media item per
      *   MediaStore, or null if the store is empty / inaccessible.
+     * @param targetPackage the package the launching intent should be
+     *   pinned to via `setPackage` — avoids the system chooser dialog
+     *   appearing underwater when no system default is set or the
+     *   default cannot handle the latest media's MIME type. Null when
+     *   no concrete package was resolvable; adapters fall back to their
+     *   own launch strategy.
      * @return true if a launch was dispatched, false to let the caller
      *   handle partial-access fallbacks.
      */
     fun openGallery(
         ctx: Context,
         svc: KrakenAccessibilityService?,
-        latest: Pair<Uri, String>?
+        latest: Pair<Uri, String>?,
+        targetPackage: String?
     ): Boolean
 }
 

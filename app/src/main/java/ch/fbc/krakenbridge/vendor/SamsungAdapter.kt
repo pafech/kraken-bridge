@@ -175,8 +175,13 @@ object SamsungAdapter : VendorAdapter {
     override fun openGallery(
         ctx: Context,
         svc: KrakenAccessibilityService?,
-        latest: Pair<Uri, String>?
+        latest: Pair<Uri, String>?,
+        targetPackage: String?
     ): Boolean {
+        // targetPackage is ignored here: setComponent already pins the launch
+        // to Samsung Gallery's main activity, which is more specific than
+        // setPackage would be (we need the grid activity, not whatever
+        // activity ACTION_VIEW would resolve to inside the same package).
         val intent = Intent(Intent.ACTION_MAIN).apply {
             component = ComponentName(PKG_SAMSUNG_GALLERY, ACTIVITY_GALLERY_MAIN)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
