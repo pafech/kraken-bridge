@@ -146,6 +146,11 @@ class KrakenBleService : Service() {
     @Volatile private var isUserDisconnect = false
     @Volatile private var lastConnectedDevice: BluetoothDevice? = null
     private var reconnectAttempts = 0
+    // Guard against onConnectionStateChange and onReadRemoteRssi both firing
+    // for the same disconnect (both run on the BLE binder thread, but each can
+    // call attemptReconnect()). Without this, reconnectAttempts double-increments
+    // and the user gets ~half the intended retry budget.
+    @Volatile private var reconnectScheduled = false
     private val MAX_RECONNECT_ATTEMPTS = 5
     private val RECONNECT_BASE_DELAY_MS = 2000L
     private val connectionCheckRunnable = object : Runnable {
@@ -203,6 +208,7 @@ class KrakenBleService : Service() {
                     persistDeviceMac(gatt.device.address)
                     isUserDisconnect = false
                     reconnectAttempts = 0  // Successful connection resets backoff counter
+                    reconnectScheduled = false
                     startConnectionMonitoring()
                     // Discover services after connection; cancel if it takes > 10s
                     handler.postDelayed(serviceDiscoveryStartRunnable, 500)
@@ -392,6 +398,7 @@ class KrakenBleService : Service() {
             Log.i(TAG, "Reconnecting to persisted device: ${device.address}")
             isUserDisconnect = false
             reconnectAttempts = 0
+            reconnectScheduled = false
             connectToDevice(device)
         } else {
             Log.w(TAG, "No persisted device to reconnect to — scanning")
@@ -998,6 +1005,11 @@ class KrakenBleService : Service() {
     }
     
     private fun attemptReconnect() {
+        if (reconnectScheduled) {
+            Log.d(TAG, "Reconnect already scheduled — ignoring redundant trigger")
+            return
+        }
+
         val device = lastConnectedDevice
         if (device == null) {
             Log.w(TAG, "Cannot reconnect: no last connected device")
@@ -1016,9 +1028,11 @@ class KrakenBleService : Service() {
         // Exponential backoff: 2s → 4s → 8s → 16s → 32s (capped at attempt index 4)
         val delay = RECONNECT_BASE_DELAY_MS * (1L shl reconnectAttempts.coerceAtMost(4))
         reconnectAttempts++
+        reconnectScheduled = true
         Log.i(TAG, "Reconnect attempt $reconnectAttempts/$MAX_RECONNECT_ATTEMPTS in ${delay}ms")
 
         handler.postDelayed({
+            reconnectScheduled = false
             if (bluetoothGatt == null && !isUserDisconnect) {
                 broadcastStatus("reconnecting", "Reconnecting... (attempt $reconnectAttempts)")
                 connectToDevice(device)
@@ -1066,6 +1080,7 @@ class KrakenBleService : Service() {
         cameraIsOpen = false
         isGalleryMode = false
         isRecording = false
+        reconnectScheduled = false
         stopScan()
         stopConnectionMonitoring()
         releaseConnectionWakeLock()
