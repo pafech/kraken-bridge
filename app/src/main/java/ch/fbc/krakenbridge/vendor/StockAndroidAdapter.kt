@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import ch.fbc.krakenbridge.KrakenAccessibilityService
@@ -182,12 +184,14 @@ object StockAndroidAdapter : VendorAdapter {
 
         if (node == null) {
             Log.d(TAG, "Trying overflow menu for trash button")
-            node = clickOverflowAndFindItem(
-                svc,
-                "Delete", "Move to bin", "Move to trash", "Bin", "Trash",
-                "Löschen", "Papierkorb", "Supprimer", "Eliminar"
-            )
-            if (node != null) Log.i(TAG, "Found delete option via overflow menu")
+            if (openOverflowMenuAndScheduleDelete(svc)) {
+                // Overflow menu opened; the delete item will be searched and
+                // clicked on the main-looper handler once the dropdown has
+                // animated in. Return early — dispatchQuickDelete's confirm
+                // step still fires after its own 1500 ms wait, which covers
+                // the worst-case open + retry budget here.
+                return true
+            }
         }
 
         if (node == null) {
@@ -279,16 +283,23 @@ object StockAndroidAdapter : VendorAdapter {
         return true
     }
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val DELETE_LABELS = listOf(
+        "Delete", "Move to bin", "Move to trash", "Bin", "Trash",
+        "Löschen", "Papierkorb", "Supprimer", "Eliminar"
+    )
+
     /**
-     * Open the "More options" / overflow menu in Google Photos and return the
-     * first matching item. Newer Photos versions (≥ 6.90) move delete here.
-     * Sleeps 600 ms after the click to let the dropdown animate open — known
-     * blocking call, kept verbatim from the previous in-service implementation.
+     * Open the "More options" / overflow menu and schedule the delete-item
+     * tap asynchronously. Returns true if the overflow button was clicked.
+     *
+     * The delete item only appears after the dropdown animates in (~300–500 ms
+     * on Photos ≥ 6.90), so we poll every 200 ms for up to 5 retries instead
+     * of blocking the accessibility main thread with Thread.sleep. Blocking
+     * here would stall TYPE_TOUCH_INTERACTION_START forwarding for the same
+     * duration, leaving the overlay stuck dim if the diver tries to touch.
      */
-    private fun clickOverflowAndFindItem(
-        svc: KrakenAccessibilityService,
-        vararg itemDescriptions: String
-    ): AccessibilityNodeInfo? {
+    private fun openOverflowMenuAndScheduleDelete(svc: KrakenAccessibilityService): Boolean {
         val overflowNode = svc.findNodeByContentDescription("More options", exactMatch = false)
             ?: svc.findNodeByContentDescription("More", exactMatch = true)
             ?: svc.findNodeByResourceId("$PKG_GOOGLE_PHOTOS:id/overflow_menu")
@@ -297,26 +308,37 @@ object StockAndroidAdapter : VendorAdapter {
 
         if (overflowNode == null) {
             Log.d(TAG, "No overflow menu button found in current window")
-            return null
+            return false
         }
 
-        Log.i(TAG, "Found overflow menu – opening to search for delete option")
+        Log.i(TAG, "Found overflow menu – opening, will search for delete option async")
         if (!svc.clickNode(overflowNode)) {
             svc.getNodeCenter(overflowNode)?.let { (x, y) -> svc.dispatchTap(x, y) }
         }
 
-        Thread.sleep(600)
+        scheduleDeleteSearch(svc, retriesLeft = 5)
+        return true
+    }
 
-        for (desc in itemDescriptions) {
-            val node = svc.findNodeByText(desc, exactMatch = false)
-                ?: svc.findNodeByContentDescription(desc, exactMatch = false)
-            if (node != null) {
-                Log.i(TAG, "Found '$desc' inside overflow menu")
-                return node
+    private fun scheduleDeleteSearch(svc: KrakenAccessibilityService, retriesLeft: Int) {
+        mainHandler.postDelayed({
+            for (desc in DELETE_LABELS) {
+                val node = svc.findNodeByText(desc, exactMatch = false)
+                    ?: svc.findNodeByContentDescription(desc, exactMatch = false)
+                if (node != null) {
+                    Log.i(TAG, "Found '$desc' inside overflow menu, tapping")
+                    if (!svc.clickNode(node)) {
+                        svc.getNodeCenter(node)?.let { (x, y) -> svc.dispatchTap(x, y) }
+                    }
+                    return@postDelayed
+                }
             }
-        }
-        Log.w(TAG, "Overflow menu opened but none of the target items were found")
-        return null
+            if (retriesLeft > 0) {
+                scheduleDeleteSearch(svc, retriesLeft - 1)
+            } else {
+                Log.w(TAG, "Overflow menu opened but no delete-like item appeared after retries")
+            }
+        }, 200)
     }
 
     private fun getGooglePhotosVersionCode(svc: KrakenAccessibilityService): Long {
