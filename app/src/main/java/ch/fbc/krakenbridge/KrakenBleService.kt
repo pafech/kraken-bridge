@@ -74,6 +74,14 @@ class KrakenBleService : Service() {
         const val BTN_MINUS_PRESS = 0x51
         const val BTN_MINUS_RELEASE = 0x50
 
+        // Buttons whose handler injects a tap or key event into the camera's
+        // accessibility tree. They require the camera to be the foreground
+        // app; otherwise the dispatch lands in some other window and looks
+        // like nothing happened to the diver.
+        private val CAMERA_TAP_BUTTONS = setOf(
+            BTN_SHUTTER_PRESS, BTN_OK_PRESS, BTN_PLUS_PRESS, BTN_MINUS_PRESS
+        )
+
         // Actions for binding
         const val ACTION_CONNECT = "ch.fbc.krakenbridge.CONNECT"
         const val ACTION_DISCONNECT = "ch.fbc.krakenbridge.DISCONNECT"
@@ -647,13 +655,14 @@ class KrakenBleService : Service() {
             // Gallery mode: navigate and manage photos
             handleGalleryButton(code)
         } else {
-            // Camera mode: if the diver navigated away from the camera (e.g.
-            // opened MainActivity to check status during a reconnect), the
-            // injected tap would land in the wrong app's accessibility tree
-            // and the press would silently do nothing. Bring the camera
-            // back to the front and swallow this press — the next one
-            // dispatches normally.
-            if (cameraIsOpen && !isCameraForeground()) {
+            // Only buttons that dispatch a tap into the camera's accessibility
+            // tree need it to be foreground. Fn (mode toggle) and Back (open
+            // gallery) re-launch their target app themselves, so they work
+            // even if the diver opened a different app. Limiting the guard
+            // here also avoids swallowing the first Fn press while the
+            // accessibility tree is still catching up to the current window.
+            val needsCameraForeground = code in CAMERA_TAP_BUTTONS
+            if (needsCameraForeground && cameraIsOpen && !isCameraForeground()) {
                 Log.i(TAG, "Button 0x${code.toString(16)} -> camera not foreground, refocusing")
                 openCamera()
                 return
