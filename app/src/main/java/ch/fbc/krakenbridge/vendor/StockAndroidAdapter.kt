@@ -109,7 +109,8 @@ object StockAndroidAdapter : VendorAdapter {
     override fun openGallery(
         ctx: Context,
         svc: KrakenAccessibilityService?,
-        latest: Pair<Uri, String>?
+        latest: Pair<Uri, String>?,
+        targetPackage: String?
     ): Boolean {
         if (latest == null) return false
         val (uri, mimeType) = latest
@@ -117,12 +118,16 @@ object StockAndroidAdapter : VendorAdapter {
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, mimeType)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                // Pin to the resolved gallery package so Android does not
+                // show a chooser dialog when no system default is set, or
+                // when the resolved image viewer cannot also play video.
+                targetPackage?.let { setPackage(it) }
             }
             ctx.startActivity(intent)
-            Log.i(TAG, "Opened $uri ($mimeType) in default gallery")
+            Log.i(TAG, "Opened $uri ($mimeType) in ${targetPackage ?: "default"}")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "No viewer available for $uri: ${e.message}")
+            Log.e(TAG, "No viewer available for $uri in $targetPackage: ${e.message}")
             false
         }
     }
