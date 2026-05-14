@@ -77,6 +77,19 @@ private val rightHandleShape = RoundedCornerShape(
     bottomStartPercent = 50
 )
 
+/**
+ * Runtime permission state pair. `needsSettings` is true when the OS will
+ * silently reject further runtime requests for this permission (user picked
+ * "don't ask again" or denied twice on newer SDKs) — the only path left is
+ * Settings. Tracking the two flags together rules out the nonsensical
+ * `granted && needsSettings` combination by construction, and the four
+ * paired booleans this replaced needed to be kept in sync on every refresh.
+ */
+private data class PermissionState(
+    val granted: Boolean = false,
+    val needsSettings: Boolean = false
+)
+
 class MainActivity : ComponentActivity() {
 
     private enum class RevokePrompt { Gallery, DiveMode }
@@ -105,15 +118,16 @@ class MainActivity : ComponentActivity() {
     private var airplaneModeOn by mutableStateOf(false)
     private var bluetoothAdapterEnabled by mutableStateOf(false)
 
-    // Per-permission grant state
-    private var bluetoothGranted by mutableStateOf(false)
-    private var bluetoothNeedsSettings by mutableStateOf(false)
-    private var locationGranted by mutableStateOf(false)
-    private var locationNeedsSettings by mutableStateOf(false)
-    private var notificationsGranted by mutableStateOf(false)
-    private var notificationsNeedsSettings by mutableStateOf(false)
-    private var mediaGranted by mutableStateOf(false)
-    private var mediaNeedsSettings by mutableStateOf(false)
+    // Per-permission grant state — runtime permissions track (granted, needsSettings)
+    // together so unreachable combinations are impossible by construction.
+    private var bluetooth by mutableStateOf(PermissionState())
+    private var location by mutableStateOf(PermissionState())
+    private var notifications by mutableStateOf(PermissionState())
+    private var media by mutableStateOf(PermissionState())
+    // Android 14+ "Select photos": permissions appear granted but MediaStore
+    // returns only the user-picked subset. Tracked separately because it does
+    // not fit the granted/needsSettings axis — partial access is technically
+    // "granted" but functionally insufficient for our use case.
     private var hasPartialMedia by mutableStateOf(false)
     private var batteryOptimizationExempt by mutableStateOf(false)
     private var accessibilityEnabled by mutableStateOf(false)
@@ -515,53 +529,57 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshPermissionState() {
-        bluetoothGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            isGranted(Manifest.permission.BLUETOOTH_SCAN) &&
-                isGranted(Manifest.permission.BLUETOOTH_CONNECT)
+        bluetooth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PermissionState(
+                granted = isGranted(Manifest.permission.BLUETOOTH_SCAN) &&
+                    isGranted(Manifest.permission.BLUETOOTH_CONNECT),
+                needsSettings = isPermanentlyDenied(Manifest.permission.BLUETOOTH_SCAN) ||
+                    isPermanentlyDenied(Manifest.permission.BLUETOOTH_CONNECT)
+            )
         } else {
-            true
+            PermissionState(granted = true)
         }
-        bluetoothNeedsSettings = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            isPermanentlyDenied(Manifest.permission.BLUETOOTH_SCAN) ||
-                isPermanentlyDenied(Manifest.permission.BLUETOOTH_CONNECT)
-        } else false
 
         // API 31+ uses BLUETOOTH_SCAN + neverForLocation, so location is no
         // longer required (or even declared in the manifest above SDK 30).
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            locationGranted = true
-            locationNeedsSettings = false
+        location = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PermissionState(granted = true)
         } else {
-            locationGranted = isGranted(Manifest.permission.ACCESS_FINE_LOCATION)
-            locationNeedsSettings = isPermanentlyDenied(Manifest.permission.ACCESS_FINE_LOCATION)
+            PermissionState(
+                granted = isGranted(Manifest.permission.ACCESS_FINE_LOCATION),
+                needsSettings = isPermanentlyDenied(Manifest.permission.ACCESS_FINE_LOCATION)
+            )
         }
 
-        notificationsGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            isGranted(Manifest.permission.POST_NOTIFICATIONS)
+        notifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            PermissionState(
+                granted = isGranted(Manifest.permission.POST_NOTIFICATIONS),
+                needsSettings = isPermanentlyDenied(Manifest.permission.POST_NOTIFICATIONS)
+            )
         } else {
-            true
+            PermissionState(granted = true)
         }
-        notificationsNeedsSettings = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            isPermanentlyDenied(Manifest.permission.POST_NOTIFICATIONS)
-        } else false
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        media = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val hasImages = isGranted(Manifest.permission.READ_MEDIA_IMAGES)
             val hasVideo = isGranted(Manifest.permission.READ_MEDIA_VIDEO)
-            mediaGranted = hasImages && hasVideo
             hasPartialMedia = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 val hasUserSelected =
                     isGranted("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")
                 hasUserSelected && !hasImages
             } else false
-            mediaNeedsSettings =
-                hasPartialMedia ||
+            PermissionState(
+                granted = hasImages && hasVideo,
+                needsSettings = hasPartialMedia ||
                     isPermanentlyDenied(Manifest.permission.READ_MEDIA_IMAGES) ||
                     isPermanentlyDenied(Manifest.permission.READ_MEDIA_VIDEO)
+            )
         } else {
-            mediaGranted = isGranted(Manifest.permission.READ_EXTERNAL_STORAGE)
-            mediaNeedsSettings = isPermanentlyDenied(Manifest.permission.READ_EXTERNAL_STORAGE)
             hasPartialMedia = false
+            PermissionState(
+                granted = isGranted(Manifest.permission.READ_EXTERNAL_STORAGE),
+                needsSettings = isPermanentlyDenied(Manifest.permission.READ_EXTERNAL_STORAGE)
+            )
         }
 
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -586,12 +604,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun cameraPermissionsReady(): Boolean =
-        bluetoothGranted && locationGranted && notificationsGranted &&
+        bluetooth.granted && location.granted && notifications.granted &&
             batteryOptimizationExempt && accessibilityEnabled
 
     private fun allRequiredPermissionsGranted(): Boolean =
         cameraPermissionsReady() &&
-            (!features.gallery || mediaGranted) &&
+            (!features.gallery || media.granted) &&
             (!features.diveMode || displayOverlayGranted)
 
     // Per-permission request methods.
@@ -605,8 +623,8 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             refreshPermissionState(); return
         }
-        if (bluetoothGranted) return
-        if (bluetoothNeedsSettings) { openAppDetailsSettings(); return }
+        if (bluetooth.granted) return
+        if (bluetooth.needsSettings) { openAppDetailsSettings(); return }
         bluetoothPermissionLauncher.launch(
             arrayOf(
                 Manifest.permission.BLUETOOTH_SCAN,
@@ -616,8 +634,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestLocation() {
-        if (locationGranted) return
-        if (locationNeedsSettings) { openAppDetailsSettings(); return }
+        if (location.granted) return
+        if (location.needsSettings) { openAppDetailsSettings(); return }
         locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
     }
 
@@ -625,8 +643,8 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             refreshPermissionState(); return
         }
-        if (notificationsGranted) return
-        if (notificationsNeedsSettings) { openAppNotificationSettings(); return }
+        if (notifications.granted) return
+        if (notifications.needsSettings) { openAppNotificationSettings(); return }
         notificationPermissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
     }
 
@@ -667,9 +685,9 @@ class MainActivity : ComponentActivity() {
 
     private fun advanceCameraSetup() {
         val next = when {
-            !bluetoothGranted -> "bt"
-            !locationGranted -> "loc"
-            !notificationsGranted -> "notif"
+            !bluetooth.granted -> "bt"
+            !location.granted -> "loc"
+            !notifications.granted -> "notif"
             !batteryOptimizationExempt -> "battery"
             !accessibilityEnabled -> "a11y"
             else -> null
@@ -694,8 +712,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestMedia() {
-        if (mediaGranted) return
-        if (mediaNeedsSettings) {
+        if (media.granted) return
+        if (media.needsSettings) {
             // Includes both permanent-denial AND partial-access — both
             // require manual re-grant in app settings.
             openAppDetailsSettings(); return
@@ -780,7 +798,7 @@ class MainActivity : ComponentActivity() {
         val pending = pendingToggle
         pendingToggle = null
         when (pending) {
-            PendingToggle.Gallery -> if (!mediaGranted) {
+            PendingToggle.Gallery -> if (!media.granted) {
                 features = features.copy(gallery = false)
                 featureRepo.save(features)
             }
@@ -807,7 +825,7 @@ class MainActivity : ComponentActivity() {
         features = next
         featureRepo.save(next)
         if (enabled) {
-            if (mediaGranted) return
+            if (media.granted) return
             pendingToggle = PendingToggle.Gallery
             requestMedia()
         } else {
@@ -843,11 +861,11 @@ class MainActivity : ComponentActivity() {
             isEnabled = cameraPermissionsReady(),
             onToggle = { if (it) startCameraSetup() },
             permissions = listOfNotNull(
-                permRow("Bluetooth", bluetoothGranted, ::toggleBluetooth),
+                permRow("Bluetooth", bluetooth.granted, ::toggleBluetooth),
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
-                    permRow("Location", locationGranted, ::toggleLocation)
+                    permRow("Location", location.granted, ::toggleLocation)
                 else null,
-                permRow("Notifications", notificationsGranted, ::toggleNotifications),
+                permRow("Notifications", notifications.granted, ::toggleNotifications),
                 permRow("Battery exemption", batteryOptimizationExempt, ::toggleBatteryOptimization),
                 permRow(
                     "Accessibility service",
@@ -865,7 +883,7 @@ class MainActivity : ComponentActivity() {
             name = "Gallery",
             description = "Browse and delete dive photos using the housing buttons. Needs access to your photos and videos.",
             isLocked = false,
-            isEnabled = features.gallery && mediaGranted,
+            isEnabled = features.gallery && media.granted,
             onToggle = ::setGalleryEnabled,
             permissions = emptyList(),
             hint = if (features.gallery && hasPartialMedia)
@@ -901,15 +919,15 @@ class MainActivity : ComponentActivity() {
     // there. For our own accessibility service we own the lifecycle, so we
     // disableSelf() directly.
     private fun toggleBluetooth() {
-        if (bluetoothGranted) openAppDetailsSettings() else requestBluetooth()
+        if (bluetooth.granted) openAppDetailsSettings() else requestBluetooth()
     }
 
     private fun toggleLocation() {
-        if (locationGranted) openAppDetailsSettings() else requestLocation()
+        if (location.granted) openAppDetailsSettings() else requestLocation()
     }
 
     private fun toggleNotifications() {
-        if (notificationsGranted) openAppNotificationSettings() else requestNotifications()
+        if (notifications.granted) openAppNotificationSettings() else requestNotifications()
     }
 
     private fun toggleBatteryOptimization() {
