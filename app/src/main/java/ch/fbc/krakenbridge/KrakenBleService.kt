@@ -82,11 +82,28 @@ class KrakenBleService : Service() {
         // SharedPreferences key for persisting last connected device MAC
         private const val PREFS_NAME = "kraken_ble"
         private const val PREF_LAST_DEVICE_MAC = "last_device_mac"
-        
+        // Last broadcast status/message — replayed on Activity onResume so the
+        // UI doesn't show stale state when the diver returns from the camera.
+        private const val PREF_LAST_STATUS = "last_status"
+        private const val PREF_LAST_MESSAGE = "last_message"
+
         // Broadcast actions
         const val BROADCAST_STATUS = "ch.fbc.krakenbridge.STATUS_UPDATE"
         const val EXTRA_STATUS = "status"
         const val EXTRA_MESSAGE = "message"
+
+        /**
+         * Read the last status/message that the service broadcast. Called by
+         * [MainActivity.onResume] to bring the UI back in sync after the
+         * Activity has been paused — statusReceiver only registers while
+         * resumed, so any broadcasts emitted in the meantime are otherwise lost.
+         */
+        fun readLastStatus(context: Context): Pair<String, String>? {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val status = prefs.getString(PREF_LAST_STATUS, null) ?: return null
+            val message = prefs.getString(PREF_LAST_MESSAGE, "") ?: ""
+            return status to message
+        }
     }
 
     private var bluetoothAdapter: BluetoothAdapter? = null
@@ -1149,7 +1166,14 @@ class KrakenBleService : Service() {
 
     private fun broadcastStatus(status: String, message: String) {
         updateNotification(message)
-        
+
+        // Persist before broadcasting so a slow resume reading after the
+        // broadcast still sees the latest state, not the previous one.
+        prefs.edit {
+            putString(PREF_LAST_STATUS, status)
+            putString(PREF_LAST_MESSAGE, message)
+        }
+
         val intent = Intent(BROADCAST_STATUS).apply {
             putExtra(EXTRA_STATUS, status)
             putExtra(EXTRA_MESSAGE, message)

@@ -371,6 +371,14 @@ class MainActivity : ComponentActivity() {
         ContextCompat.registerReceiver(
             this, statusReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED
         )
+        // Replay last broadcast status from disk: while the Activity was paused
+        // (typically the diver was in Camera or Photos), any state transitions
+        // the BleService emitted were missed by statusReceiver. Without this,
+        // returning to the app would show whatever string was set on last pause.
+        KrakenBleService.readLastStatus(this)?.let { (status, message) ->
+            connectionStatus = status
+            statusMessage = message
+        }
         accessibilityEnabled = isAccessibilityServiceEnabled()
         refreshPermissionState()
     }
