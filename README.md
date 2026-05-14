@@ -2,7 +2,7 @@
 
 Android app that connects a [Kraken](https://www.krakenunderwatersystems.com/) dive housing's BLE remote to the phone's default camera and gallery apps. Divers control the camera entirely through the housing buttons — no touchscreen interaction needed underwater.
 
-The shutter button opens whichever camera app the system launches via `android.media.action.STILL_IMAGE_CAMERA` (Google Camera on Pixel, Samsung Camera on Galaxy, etc.) and the back button opens the latest capture in whichever gallery app the system uses for `image/*` viewing. Per-vendor behaviour quirks (button identifiers, mode-switch swipes, delete confirmations) live in dedicated adapters under `vendor/` — today only the stock-Android adapter (Google Camera + Photos) is fully tuned.
+The shutter button opens whichever camera app the system launches via `android.media.action.STILL_IMAGE_CAMERA` (Google Camera on Pixel, Samsung Camera on Galaxy, etc.) and the back button opens the latest capture in whichever gallery app the system uses for the captured media. Per-vendor behaviour quirks (button identifiers, mode-switch swipes, delete confirmations) live in dedicated adapters under `vendor/`. Two adapters ship today: stock-Android (Google Camera + Photos, tuned on Pixel) and Samsung (Samsung Camera + Gallery, tuned on Galaxy S20+ / One UI 5.1).
 
 ## Button mapping
 
