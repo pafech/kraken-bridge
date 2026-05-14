@@ -56,6 +56,16 @@ class KrakenAccessibilityService : AccessibilityService() {
     internal var screenHeight = 0
         private set
 
+    /**
+     * Package name of the window currently shown to the user — typically the
+     * foreground app. [KrakenBleService] reads this before dispatching camera
+     * button events: if the diver has opened a different app mid-dive (e.g.
+     * checking connection status during a reconnect), we re-open the camera
+     * instead of injecting a tap into the wrong app's accessibility tree.
+     */
+    internal val currentForegroundPackage: String?
+        get() = rootInActiveWindow?.packageName?.toString()
+
     private val keyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
