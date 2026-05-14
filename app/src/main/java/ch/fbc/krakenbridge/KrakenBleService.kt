@@ -803,6 +803,16 @@ class KrakenBleService : Service() {
             val modeName = if (isVideoMode) "VIDEO" else "PHOTO"
             updateNotification("Ready - $modeName mode")
             Log.i(TAG, "Switched back to CAMERA mode")
+            // Re-apply the previously active capture mode after the camera
+            // resumes. A freshly-opened camera typically lands in photo mode
+            // even when the diver left from video — without this re-sync,
+            // the next Fn press would toggle isVideoMode against a wrong
+            // assumption and need two presses to land on video. The adapter
+            // checks node.isChecked and no-ops when already in the target
+            // mode, so this is safe when modes happen to align.
+            handler.postDelayed({
+                swipeToSwitchCameraMode(isVideoMode)
+            }, 600)
         }
     }
     
