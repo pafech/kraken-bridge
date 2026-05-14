@@ -266,8 +266,12 @@ class KrakenBleService : Service() {
                 val modeName = if (isVideoMode) "VIDEO" else "PHOTO"
                 broadcastStatus("ready", "Ready - $modeName mode")
             } else {
-                Log.e(TAG, "Failed to enable notifications: $status")
+                // CCCD write failed: GATT is still connected but buttons won't fire.
+                // Force disconnect so the standard reconnect path runs — otherwise
+                // the notification keeps saying "Connected" with non-working buttons.
+                Log.e(TAG, "Failed to enable notifications: $status — forcing disconnect to retry")
                 broadcastStatus("error", "Failed to enable notifications")
+                gatt.disconnect()
             }
         }
         
