@@ -69,6 +69,12 @@ class PermissionRequestLog(context: Context) {
  * `mainPageOpened` — flips true the first time the user reaches the Main
  * page so the Settings → Main edge handle stops glowing as a CTA. Backed
  * up so a returning user on a new device doesn't see the glow again.
+ *
+ * `a11yDisclosureAccepted` — prominent-disclosure consent for the
+ * AccessibilityService per Google Play User Data Policy. Persisted because
+ * once the user has affirmatively consented, re-prompting on every launch
+ * is hostile. Backed up so a Play Store reinstall doesn't drop the consent
+ * record. Reset only by Clear Data or uninstall.
  */
 class UiHints(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -77,8 +83,13 @@ class UiHints(context: Context) {
         get() = prefs.getBoolean(KEY_MAIN_OPENED, false)
         set(value) { prefs.edit { putBoolean(KEY_MAIN_OPENED, value) } }
 
+    var a11yDisclosureAccepted: Boolean
+        get() = prefs.getBoolean(KEY_A11Y_DISCLOSURE_ACCEPTED, false)
+        set(value) { prefs.edit { putBoolean(KEY_A11Y_DISCLOSURE_ACCEPTED, value) } }
+
     companion object {
         private const val PREFS_NAME = "kraken_ui_hints"
         private const val KEY_MAIN_OPENED = "main_page_opened"
+        private const val KEY_A11Y_DISCLOSURE_ACCEPTED = "a11y_disclosure_accepted"
     }
 }

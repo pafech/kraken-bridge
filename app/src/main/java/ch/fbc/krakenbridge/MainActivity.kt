@@ -47,6 +47,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import ch.fbc.krakenbridge.ui.AccessibilityConsentScreen
 import ch.fbc.krakenbridge.ui.AppHeader
 import ch.fbc.krakenbridge.ui.ChevronLeftIcon
 import ch.fbc.krakenbridge.ui.ChevronRightIcon
@@ -109,12 +110,19 @@ class MainActivity : ComponentActivity() {
     private var pendingToggle: PendingToggle? = null
     private var mainPageOpened by mutableStateOf(false)
 
-    // Prominent-disclosure consent dialog for the AccessibilityService, per
-    // Google Play User Data Policy. The dialog is the *only* path that may
-    // open Settings.ACTION_ACCESSIBILITY_SETTINGS: the system settings hand-off
-    // counts as "requesting" the permission, so we must obtain explicit
-    // affirmative consent (two-button Accept/Decline, non-dismissible) before
-    // that point. Tapping outside or pressing back is treated as decline.
+    // Prominent-disclosure consent for the AccessibilityService, per Google
+    // Play User Data Policy. Two surfaces, both rooted in the same UiHints
+    // flag:
+    //   • a11yDisclosureAccepted == false → the whole app UI is replaced by
+    //     a full-screen consent gate (AccessibilityConsentScreen) at launch.
+    //     The gate is unmissable regardless of whether the reviewer enables
+    //     the AccessibilityService through our toggle or directly via
+    //     Android Settings → Accessibility.
+    //   • Once accepted, we still show showA11yDisclosure as an in-flow
+    //     confirmation AlertDialog just before opening the system
+    //     accessibility settings — belt-and-suspenders so the consent is
+    //     visible at the moment of "requesting the permission".
+    private var a11yDisclosureAccepted by mutableStateOf(false)
     private var showA11yDisclosure by mutableStateOf(false)
 
     // Sequential Camera setup state. Holds the permission key the chain is
@@ -214,6 +222,7 @@ class MainActivity : ComponentActivity() {
         permLog = PermissionRequestLog(this)
         uiHints = UiHints(this)
         mainPageOpened = uiHints.mainPageOpened
+        a11yDisclosureAccepted = uiHints.a11yDisclosureAccepted
         features = featureRepo.load()
         // refreshPermissionState reads OS state (perms granted, battery, overlay).
         // accessibilityEnabled lives outside that — query it eagerly so the
@@ -228,11 +237,24 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    revokePrompts.firstOrNull()?.let { prompt -> RevokePromptDialog(prompt) }
-                    if (showA11yDisclosure) AccessibilityDisclosureDialog()
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        WaveBackground()
-                        MainPager(initialPage)
+                    if (!a11yDisclosureAccepted) {
+                        // Prominent-disclosure gate: until the user makes an
+                        // affirmative tap, no other UI is reachable. Decline
+                        // closes the app; accept persists and unblocks.
+                        AccessibilityConsentScreen(
+                            onAccept = {
+                                uiHints.a11yDisclosureAccepted = true
+                                a11yDisclosureAccepted = true
+                            },
+                            onDecline = { finish() }
+                        )
+                    } else {
+                        revokePrompts.firstOrNull()?.let { prompt -> RevokePromptDialog(prompt) }
+                        if (showA11yDisclosure) AccessibilityDisclosureDialog()
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            WaveBackground()
+                            MainPager(initialPage)
+                        }
                     }
                 }
             }
