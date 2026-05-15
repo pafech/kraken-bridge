@@ -43,6 +43,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -107,6 +108,14 @@ class MainActivity : ComponentActivity() {
     private var revokePrompts by mutableStateOf<List<RevokePrompt>>(emptyList())
     private var pendingToggle: PendingToggle? = null
     private var mainPageOpened by mutableStateOf(false)
+
+    // Prominent-disclosure consent dialog for the AccessibilityService, per
+    // Google Play User Data Policy. The dialog is the *only* path that may
+    // open Settings.ACTION_ACCESSIBILITY_SETTINGS: the system settings hand-off
+    // counts as "requesting" the permission, so we must obtain explicit
+    // affirmative consent (two-button Accept/Decline, non-dismissible) before
+    // that point. Tapping outside or pressing back is treated as decline.
+    private var showA11yDisclosure by mutableStateOf(false)
 
     // Sequential Camera setup state. Holds the permission key the chain is
     // currently waiting on. If onPermissionResult sees the same key still
@@ -220,6 +229,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     revokePrompts.firstOrNull()?.let { prompt -> RevokePromptDialog(prompt) }
+                    if (showA11yDisclosure) AccessibilityDisclosureDialog()
                     Box(modifier = Modifier.fillMaxSize()) {
                         WaveBackground()
                         MainPager(initialPage)
@@ -664,11 +674,82 @@ class MainActivity : ComponentActivity() {
         systemSettingsLauncher.launch(intent)
     }
 
+    /**
+     * Prominent-disclosure gate per Google Play User Data Policy: any path that
+     * wants to enable the AccessibilityService must funnel through the consent
+     * dialog first. The dialog itself opens system settings on Accept and
+     * cancels the in-flight Camera setup chain on Decline. We do **not** open
+     * accessibility settings directly here — even a Toast + immediate jump
+     * counts as "requesting the permission" without explicit consent.
+     */
     private fun requestAccessibility() {
         if (accessibilityEnabled) return
+        showA11yDisclosure = true
+    }
+
+    /**
+     * Called from the disclosure dialog's "I agree" button — the user's
+     * affirmative action. Only after this point may we hand the user to the
+     * system Accessibility settings.
+     */
+    private fun onAccessibilityConsentAccepted() {
+        showA11yDisclosure = false
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-        Toast.makeText(this, "Enable \"Kraken Dive Photo\" accessibility service", Toast.LENGTH_LONG).show()
         systemSettingsLauncher.launch(intent)
+    }
+
+    /**
+     * Called from the disclosure dialog's "Don't allow" button. Cancels the
+     * Camera setup chain so the UI doesn't loop back into the same dialog,
+     * and refreshes state so the row reflects the still-disabled service.
+     */
+    private fun onAccessibilityConsentDeclined() {
+        showA11yDisclosure = false
+        cameraSetupAwaiting = null
+        refreshPermissionState()
+    }
+
+    @Composable
+    private fun AccessibilityDisclosureDialog() {
+        AlertDialog(
+            onDismissRequest = { onAccessibilityConsentDeclined() },
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            ),
+            title = { Text("Allow Accessibility access?") },
+            text = {
+                Text(
+                    "Kraken Dive Photo uses Android's Accessibility Service to translate " +
+                        "your housing's Bluetooth button presses into taps, swipes, and " +
+                        "system actions for your phone's camera and gallery apps while " +
+                        "you're diving.\n\n" +
+                        "If you allow it, the service will be able to:\n" +
+                        "• Read on-screen content of the foreground camera or gallery app " +
+                        "to locate buttons (shutter, mode switch, delete, swipe targets).\n" +
+                        "• Perform taps, swipes, and system actions (Back, Home) on your " +
+                        "behalf.\n\n" +
+                        "What Kraken Dive Photo does NOT do:\n" +
+                        "• It does not collect, store, log, or transmit any screen content " +
+                        "or personal data. Everything stays on this device.\n" +
+                        "• It does not record audio or capture screenshots.\n" +
+                        "• It does not interact with apps outside your active camera or " +
+                        "gallery session.\n\n" +
+                        "You can revoke this access at any time from Android Settings → " +
+                        "Accessibility, or by turning the Accessibility row off in this app."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { onAccessibilityConsentAccepted() }) {
+                    Text("I agree")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { onAccessibilityConsentDeclined() }) {
+                    Text("Don't allow")
+                }
+            }
+        )
     }
 
     /**
