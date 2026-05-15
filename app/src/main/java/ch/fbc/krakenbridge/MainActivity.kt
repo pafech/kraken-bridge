@@ -717,6 +717,14 @@ class MainActivity : ComponentActivity() {
                 dismissOnBackPress = false,
                 dismissOnClickOutside = false
             ),
+            // Default textContentColor is onSurfaceVariant, which our
+            // darkColorScheme doesn't define — Material 3 falls back to a
+            // low-contrast grey on the dark surface. Pin title + body to
+            // onSurface (OceanText, ~12:1 on OceanCard) so the disclosure
+            // text is fully legible.
+            containerColor = MaterialTheme.colorScheme.surface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            textContentColor = MaterialTheme.colorScheme.onSurface,
             title = { Text("Allow Accessibility access?") },
             text = {
                 Text(
