@@ -49,6 +49,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import ch.fbc.krakenbridge.ui.AccessibilityConsentScreen
 import ch.fbc.krakenbridge.ui.AppHeader
+import ch.fbc.krakenbridge.ui.ConsentActionButtons
 import ch.fbc.krakenbridge.ui.ChevronLeftIcon
 import ch.fbc.krakenbridge.ui.ChevronRightIcon
 import ch.fbc.krakenbridge.ui.FeaturePermission
@@ -113,16 +114,21 @@ class MainActivity : ComponentActivity() {
     // Prominent-disclosure consent for the AccessibilityService, per Google
     // Play User Data Policy. Two surfaces, both rooted in the same UiHints
     // flag:
-    //   • a11yDisclosureAccepted == false → the whole app UI is replaced by
-    //     a full-screen consent gate (AccessibilityConsentScreen) at launch.
+    //   • a11yDisclosureAccepted == false → at launch the whole app UI is
+    //     replaced by a full-screen consent gate (AccessibilityConsentScreen).
     //     The gate is unmissable regardless of whether the reviewer enables
     //     the AccessibilityService through our toggle or directly via
     //     Android Settings → Accessibility.
-    //   • Once accepted, we still show showA11yDisclosure as an in-flow
-    //     confirmation AlertDialog just before opening the system
-    //     accessibility settings — belt-and-suspenders so the consent is
-    //     visible at the moment of "requesting the permission".
+    //   • Declining the gate does NOT close the app (that would be a coercive
+    //     consent wall). It sets a11yDisclosureDismissedThisSession so the app
+    //     stays usable with the service off; the gate re-appears on the next
+    //     launch until consent is given.
+    //   • showA11yDisclosure is the in-flow confirmation AlertDialog shown just
+    //     before opening the system accessibility settings — belt-and-suspenders
+    //     so the consent is visible at the moment of "requesting the permission".
+    //     Accepting it also persists a11yDisclosureAccepted.
     private var a11yDisclosureAccepted by mutableStateOf(false)
+    private var a11yDisclosureDismissedThisSession by mutableStateOf(false)
     private var showA11yDisclosure by mutableStateOf(false)
 
     // Sequential Camera setup state. Holds the permission key the chain is
@@ -237,16 +243,17 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    if (!a11yDisclosureAccepted) {
-                        // Prominent-disclosure gate: until the user makes an
-                        // affirmative tap, no other UI is reachable. Decline
-                        // closes the app; accept persists and unblocks.
+                    if (!a11yDisclosureAccepted && !a11yDisclosureDismissedThisSession) {
+                        // Prominent-disclosure gate. Accept persists consent and
+                        // unblocks; Decline dismisses the gate for this session
+                        // (the app stays usable, the service stays off) and the
+                        // gate returns on the next launch until consent is given.
                         AccessibilityConsentScreen(
                             onAccept = {
                                 uiHints.a11yDisclosureAccepted = true
                                 a11yDisclosureAccepted = true
                             },
-                            onDecline = { finish() }
+                            onDecline = { a11yDisclosureDismissedThisSession = true }
                         )
                     } else {
                         revokePrompts.firstOrNull()?.let { prompt -> RevokePromptDialog(prompt) }
@@ -711,17 +718,19 @@ class MainActivity : ComponentActivity() {
 
     /**
      * Called from the disclosure dialog's "I agree" button — the user's
-     * affirmative action. Only after this point may we hand the user to the
-     * system Accessibility settings.
+     * affirmative action. Persists consent (so the launch gate never blocks
+     * again) and only then hands the user to the system Accessibility settings.
      */
     private fun onAccessibilityConsentAccepted() {
         showA11yDisclosure = false
+        uiHints.a11yDisclosureAccepted = true
+        a11yDisclosureAccepted = true
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         systemSettingsLauncher.launch(intent)
     }
 
     /**
-     * Called from the disclosure dialog's "Don't allow" button. Cancels the
+     * Called from the disclosure dialog's "Decline" button. Cancels the
      * Camera setup chain so the UI doesn't loop back into the same dialog,
      * and refreshes state so the row reflects the still-disabled service.
      */
@@ -769,15 +778,17 @@ class MainActivity : ComponentActivity() {
                         "Accessibility, or by turning the Accessibility row off in this app."
                 )
             },
+            // Both consent options live in the confirmButton slot as one
+            // full-width row of two equally-prominent buttons (see
+            // ConsentActionButtons). dismissButton is intentionally omitted so
+            // Material doesn't render a third, lower-emphasis control — the only
+            // negative option is the equally-weighted "Decline" button.
             confirmButton = {
-                TextButton(onClick = { onAccessibilityConsentAccepted() }) {
-                    Text("I agree")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { onAccessibilityConsentDeclined() }) {
-                    Text("Don't allow")
-                }
+                ConsentActionButtons(
+                    onAccept = { onAccessibilityConsentAccepted() },
+                    onDecline = { onAccessibilityConsentDeclined() },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         )
     }

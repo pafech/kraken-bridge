@@ -254,6 +254,9 @@ app/src/main/java/ch/fbc/krakenbridge/
    ui/
      MainScreen.kt              — Compose home (status hero + Connect CTA)
      PermissionScreen.kt        — single-CTA walkthrough screen
+     AccessibilityConsentScreen.kt — full-screen prominent-disclosure gate
+     ConsentActionButtons.kt    — the two equal consent buttons, shared by
+                                   the gate and the in-flow disclosure dialog
      HelpDialog.kt              — button-mapping help sheet
      Theme.kt, WaveBackground.kt — ocean palette + animated waves
 
@@ -268,6 +271,8 @@ app/src/androidTest/
 
 app/proguard-rules.pro          — R8 keep rules
 docs/privacy-policy.html        — published privacy policy
+docs/play-disclosure-compliance.md — AccessibilityService prominent-disclosure
+                                  policy → implementation map + video script
 ```
 
 ## Known optimisation debt
