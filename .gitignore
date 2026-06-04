@@ -36,3 +36,7 @@ keystore.properties
 
 # Logs
 *.log
+
+# Local-only agent files (kept off the remote)
+/CLAUDE.md
+/.claude/
