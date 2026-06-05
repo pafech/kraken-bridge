@@ -24,6 +24,30 @@ Feature: Feature toggles drive permissions and button mapping
     Then the system Bluetooth permission dialog appears
     And no other permission dialog is queued behind it
 
+  # The two scenarios below are the permission walkthrough — the sequential
+  # Camera setup chain started by the Camera toggle (MainActivity:
+  # startCameraSetup → advanceCameraSetup). Hand-tested on a device:
+  # system permission dialogs are one-shot per install (a second denial
+  # locks the permission), so an emulator run is not idempotent.
+
+  Scenario: Camera toggle walks every missing permission in sequence
+    Given a fresh install with no permissions granted
+    When the user toggles Camera on
+    Then the system Bluetooth permission dialog appears first
+    And on Allow the system Notifications dialog follows
+    And on Allow the Battery exemption dialog follows
+    And on Allow the Accessibility consent dialog follows
+    And on I agree the system Accessibility settings open
+    And after enabling the service the Camera toggle locks on
+
+  Scenario: Denying mid-chain stops the walkthrough at that permission
+    Given a fresh install with no permissions granted
+    When the user toggles Camera on
+    And the user denies the system Bluetooth permission dialog
+    Then no further permission dialog appears
+    And the Camera toggle stays off
+    And the Bluetooth permission row remains tappable for repair
+
   Scenario: Enabling Gallery fires the Photos & Videos dialog and stays on if granted
     Given the user is on the Settings page
     When the user toggles Gallery on
