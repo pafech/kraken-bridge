@@ -576,12 +576,13 @@ class KrakenBleService : Service() {
 
     private fun connectToDevice(device: BluetoothDevice) {
         broadcastStatus("connecting", "Connecting to ${device.address}...")
-        // TODO(pafech, 2026-06-05): API 37 deprecates every Context-based
-        // connectGatt overload in favour of BluetoothGattConnectionSettings +
-        // Executor. The replacement cannot run on API <= 36, and our only test
-        // device is API 36 — migrating now would ship a code path no housing
-        // test can reach. Switch once an API 37 device is available; note the
-        // Executor variant changes callback threading (binder thread today).
+        // Deliberate use of the API-37-deprecated overload: the replacement
+        // (BluetoothGattConnectionSettings + Executor) requires API 37 at
+        // runtime and no available test device runs it, so a gated new path
+        // would be untestable with the housing. Deprecated connectGatt
+        // overloads remain supported for the foreseeable future. If migrating
+        // later: the Executor variant moves GATT callbacks off the binder
+        // thread — revalidate threading assumptions with real hardware.
         @Suppress("DEPRECATION")
         bluetoothGatt = device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
