@@ -1,4 +1,4 @@
-@photo-capture
+@photo-capture @needs-a11y
 Feature: Photo capture via Kraken housing shutter button
   As a diver using a Kraken underwater housing
   I want to press the shutter button on the housing to take photos

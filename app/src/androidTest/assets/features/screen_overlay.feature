@@ -1,4 +1,4 @@
-@screen-overlay
+@screen-overlay @needs-a11y
 Feature: Screen overlay keeps the dive accessible without a lockscreen
   As a diver with the phone sealed inside a Kraken housing
   I want the screen never to truly turn off during a dive session

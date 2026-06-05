@@ -1,4 +1,4 @@
-@video-recording
+@video-recording @needs-a11y
 Feature: Video recording mode via Kraken housing
   As a diver using a Kraken underwater housing
   I want to switch to video mode and control recording

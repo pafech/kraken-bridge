@@ -1,4 +1,4 @@
-@gallery @delete
+@gallery @delete @needs-a11y
 Feature: Gallery browsing and photo deletion via Kraken housing
   As a diver using a Kraken underwater housing
   I want to browse photos in Google Photos and delete unwanted shots

@@ -14,6 +14,14 @@ import java.io.IOException
  * The [Before] hook enables the Kraken Bridge Accessibility Service via the adb shell so tests
  * can drive it without requiring manual user interaction in Settings. This works because
  * instrumented tests run with shell-level privileges via [android.app.UiAutomation].
+ *
+ * The hooks are scoped to `@needs-a11y` features: enabling/disabling an
+ * accessibility service around *every* scenario destabilises UiAutomator's
+ * window snapshot (the system rebuilds its accessibility connections), which
+ * intermittently broke the pure-UI disclosure-gate scenarios with
+ * "gate was not shown after launch" (runs 27012024159, 27015010287,
+ * 27022762323, 27024033854). Scenarios that don't drive the service now run
+ * with no service churn at all; UiAutomation keeps the only a11y connection.
  */
 class CommonSteps {
 
@@ -22,7 +30,7 @@ class CommonSteps {
 
     // ── Cucumber lifecycle ───────────────────────────────────────────────────
 
-    @Before
+    @Before("@needs-a11y")
     fun enableAccessibilityServiceAndWait() {
         shell("settings put secure enabled_accessibility_services " +
                 "ch.fbc.krakenbridge/ch.fbc.krakenbridge.KrakenAccessibilityService")
@@ -36,7 +44,7 @@ class CommonSteps {
         }
     }
 
-    @After
+    @After("@needs-a11y")
     fun disableAccessibilityService() {
         shell("settings put secure enabled_accessibility_services \"\"")
         shell("settings put secure accessibility_enabled 0")

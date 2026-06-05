@@ -1,4 +1,4 @@
-@bluetooth-off @device-only
+@bluetooth-off @device-only @needs-a11y
 Feature: Connect when the Bluetooth adapter is off
   As a diver who just installed the app
   I want a clear path to connect even if Bluetooth is currently off
