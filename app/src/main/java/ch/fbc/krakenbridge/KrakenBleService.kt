@@ -272,14 +272,7 @@ class KrakenBleService : Service() {
     private fun resetState() {
         // Status / message survive: this runs on ACTION_CONNECT right before
         // the scan-status updates take over.
-        mutableState.update {
-            it.copy(
-                isVideoMode = false,
-                isGalleryMode = false,
-                isRecording = false,
-                isCameraOpen = false
-            )
-        }
+        mutableState.update { it.freshSession() }
         wakeLocks.releaseVideo()
         // Reset dedup so the first event after a reconnect is never silently dropped
         buttonRouter.resetDebounce()
@@ -403,9 +396,7 @@ class KrakenBleService : Service() {
      * service (onCreate failure) from crashing again in onDestroy.
      */
     private fun releaseSessionResources() {
-        mutableState.update {
-            it.copy(isGalleryMode = false, isRecording = false, isCameraOpen = false)
-        }
+        mutableState.update { it.sessionReleased() }
         if (::connectionManager.isInitialized) connectionManager.release()
         if (::wakeLocks.isInitialized) {
             wakeLocks.releaseConnection()

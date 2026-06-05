@@ -36,4 +36,52 @@ data class KrakenServiceState(
     val isRecording: Boolean = false,
     /** Whether the camera app has been opened at least once this session. */
     val isCameraOpen: Boolean = false
-)
+) {
+
+    // ── Pure transitions ─────────────────────────────────────────────────────
+    // The session's mode/recording state machine, expressed as side-effect-free
+    // functions so it is JVM-unit-testable. Controllers apply these inside
+    // mutableState.update / updateAndGet; side effects (wake locks, intents,
+    // notifications) stay in the controllers.
+
+    /** First shutter press of a session only opens the camera. */
+    fun withCameraOpened(): KrakenServiceState = copy(isCameraOpen = true)
+
+    /** Shutter press in video mode starts/stops the recording. */
+    fun withRecordingToggled(): KrakenServiceState = copy(isRecording = !isRecording)
+
+    /** Leaving a recording context (mode/gallery switch, reset) stops it. */
+    fun withRecordingStopped(): KrakenServiceState = copy(isRecording = false)
+
+    /** Fn press: photo ↔ video. */
+    fun withCameraModeToggled(): KrakenServiceState = copy(isVideoMode = !isVideoMode)
+
+    /**
+     * Camera ↔ gallery switch. Entering gallery backgrounds the camera;
+     * returning re-opens it — so the next shutter press shoots instead of
+     * "first press opens camera".
+     */
+    fun withGalleryModeToggled(): KrakenServiceState {
+        val toGallery = !isGalleryMode
+        return copy(isGalleryMode = toGallery, isCameraOpen = !toGallery)
+    }
+
+    /** ACTION_CONNECT: a new session starts with every flag cleared. */
+    fun freshSession(): KrakenServiceState = copy(
+        isVideoMode = false,
+        isGalleryMode = false,
+        isRecording = false,
+        isCameraOpen = false
+    )
+
+    /**
+     * Service teardown: gallery/recording/camera-open are session artifacts
+     * and clear; the capture mode survives so a START_STICKY reconnect within
+     * the same process resumes in the diver's chosen mode.
+     */
+    fun sessionReleased(): KrakenServiceState = copy(
+        isGalleryMode = false,
+        isRecording = false,
+        isCameraOpen = false
+    )
+}

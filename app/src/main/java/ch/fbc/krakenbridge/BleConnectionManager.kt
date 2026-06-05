@@ -398,8 +398,7 @@ class BleConnectionManager(
         value: ByteArray?
     ): Int? {
         if (characteristic.uuid != BUTTON_CHAR_UUID) return null
-        if (value == null || value.isEmpty()) return null
-        return value[0].toInt() and 0xFF
+        return buttonCodeFrom(value)
     }
 
     private fun startConnectionMonitoring() {

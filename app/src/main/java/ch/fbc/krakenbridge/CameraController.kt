@@ -52,12 +52,12 @@ class CameraController(
                 if (!current.isCameraOpen) {
                     // First press: just open camera
                     openCamera()
-                    state.update { it.copy(isCameraOpen = true) }
+                    state.update { it.withCameraOpened() }
                     Log.i(TAG, "Shutter pressed -> opened camera (first press)")
                 } else if (current.isVideoMode) {
                     // Video mode: toggle recording
                     val nowRecording = state
-                        .updateAndGet { it.copy(isRecording = !it.isRecording) }
+                        .updateAndGet { it.withRecordingToggled() }
                         .isRecording
                     if (nowRecording) {
                         // Starting video recording - keep screen on
@@ -118,7 +118,7 @@ class CameraController(
      */
     fun stopRecordingIfActive() {
         if (state.value.isRecording) {
-            state.update { it.copy(isRecording = false) }
+            state.update { it.withRecordingStopped() }
             wakeLocks.releaseVideo()
         }
     }
@@ -173,7 +173,7 @@ class CameraController(
         stopRecordingIfActive()
 
         val toVideo = state
-            .updateAndGet { it.copy(isVideoMode = !it.isVideoMode) }
+            .updateAndGet { it.withCameraModeToggled() }
             .isVideoMode
         val modeName = if (toVideo) "VIDEO" else "PHOTO"
         Log.i(TAG, "Fn pressed -> switching to $modeName mode")

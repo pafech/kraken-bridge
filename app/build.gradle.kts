@@ -113,6 +113,11 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
 
+    // ── JVM unit tests ───────────────────────────────────────────────────────
+    // Pure-logic tests (ReconnectBackoff, ButtonDebouncer, state transitions,
+    // payload parsing) — no emulator, run by the unit-tests CI job.
+    testImplementation("junit:junit:4.13.2")
+
     // ── Instrumented / BDD tests ─────────────────────────────────────────────
     // Cucumber-Android: Gherkin BDD runner. Features live in
     // src/androidTest/assets/features/; step definitions are auto-discovered

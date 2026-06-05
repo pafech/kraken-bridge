@@ -27,19 +27,12 @@ class ButtonEventRouter(
 ) {
 
     // Deduplication for button events (both legacy and new BLE callbacks may fire)
-    private var lastButtonCode = -1
-    private var lastButtonTime = 0L
+    private val debouncer = ButtonDebouncer(DEBOUNCE_MS) { System.currentTimeMillis() }
 
     fun route(code: Int) {
-        // Deduplicate: both legacy and new BLE callbacks may fire for same event
-        val now = System.currentTimeMillis()
-        synchronized(this) {
-            if (code == lastButtonCode && (now - lastButtonTime) < DEBOUNCE_MS) {
-                Log.d(TAG, "Button event: 0x${code.toString(16)} (deduplicated, ignoring)")
-                return
-            }
-            lastButtonCode = code
-            lastButtonTime = now
+        if (!debouncer.shouldProcess(code)) {
+            Log.d(TAG, "Button event: 0x${code.toString(16)} (deduplicated, ignoring)")
+            return
         }
 
         Log.d(TAG, "Button event: 0x${code.toString(16)}")
@@ -84,12 +77,7 @@ class ButtonEventRouter(
     }
 
     /** Reset dedup so the first event after a reconnect is never silently dropped. */
-    fun resetDebounce() {
-        synchronized(this) {
-            lastButtonCode = -1
-            lastButtonTime = 0L
-        }
-    }
+    fun resetDebounce() = debouncer.reset()
 
     companion object {
         // Buttons whose handler injects a tap or key event into the camera's

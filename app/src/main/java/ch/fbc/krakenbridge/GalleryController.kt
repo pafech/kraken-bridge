@@ -70,14 +70,7 @@ class GalleryController(
         // If switching away from camera while recording, release wake lock
         cameraController.stopRecordingIfActive()
 
-        val newState = state.updateAndGet {
-            val toGallery = !it.isGalleryMode
-            it.copy(
-                isGalleryMode = toGallery,
-                // Entering gallery backgrounds the camera; returning re-opens it.
-                isCameraOpen = !toGallery
-            )
-        }
+        val newState = state.updateAndGet { it.withGalleryModeToggled() }
 
         if (newState.isGalleryMode) {
             openPhotosApp()
