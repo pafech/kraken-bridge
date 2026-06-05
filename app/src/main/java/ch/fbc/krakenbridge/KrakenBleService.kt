@@ -285,8 +285,11 @@ class KrakenBleService : Service() {
             extractButtonCode(characteristic, value)?.let { handleButtonEvent(it) }
         }
 
-        // Legacy callback for older Android versions
+        // Legacy callback for API < 33 — those releases never invoke the
+        // (gatt, characteristic, value) overload above, and characteristic.value
+        // is the only way to read the payload there.
         @Deprecated("Deprecated in Java")
+        @Suppress("DEPRECATION")
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic
@@ -573,6 +576,13 @@ class KrakenBleService : Service() {
 
     private fun connectToDevice(device: BluetoothDevice) {
         broadcastStatus("connecting", "Connecting to ${device.address}...")
+        // TODO(pafech, 2026-06-05): API 37 deprecates every Context-based
+        // connectGatt overload in favour of BluetoothGattConnectionSettings +
+        // Executor. The replacement cannot run on API <= 36, and our only test
+        // device is API 36 — migrating now would ship a code path no housing
+        // test can reach. Switch once an API 37 device is available; note the
+        // Executor variant changes callback threading (binder thread today).
+        @Suppress("DEPRECATION")
         bluetoothGatt = device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     }
 
@@ -808,7 +818,7 @@ class KrakenBleService : Service() {
             // even when the diver left from video — without this re-sync,
             // the next Fn press would toggle isVideoMode against a wrong
             // assumption and need two presses to land on video. The adapter
-            // checks node.isChecked and no-ops when already in the target
+            // checks the toggle's checked state and no-ops when already in the target
             // mode, so this is safe when modes happen to align.
             handler.postDelayed({
                 swipeToSwitchCameraMode(isVideoMode)

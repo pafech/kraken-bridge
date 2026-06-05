@@ -312,6 +312,19 @@ class KrakenAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * Checked state of a node. API 36 deprecated the boolean isChecked in
+     * favour of the tri-state getChecked (a partially-checked toggle is not
+     * "in the target mode", so it maps to false here).
+     */
+    internal fun isNodeChecked(node: AccessibilityNodeInfo): Boolean =
+        if (Build.VERSION.SDK_INT >= 36) {
+            node.checked == AccessibilityNodeInfo.CHECKED_STATE_TRUE
+        } else {
+            @Suppress("DEPRECATION")
+            node.isChecked
+        }
+
+    /**
      * Get the center coordinates of a node's bounds on screen
      */
     internal fun getNodeCenter(node: AccessibilityNodeInfo): Pair<Float, Float>? {

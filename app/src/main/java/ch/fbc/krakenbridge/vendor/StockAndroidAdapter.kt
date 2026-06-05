@@ -79,7 +79,7 @@ object StockAndroidAdapter : VendorAdapter {
         }
 
         if (node != null) {
-            if (node.isChecked) {
+            if (svc.isNodeChecked(node)) {
                 Log.i(TAG, "Already in $targetMode mode, no action needed")
                 return
             }
