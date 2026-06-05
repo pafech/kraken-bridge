@@ -57,9 +57,10 @@ android {
             // .so in the AAB comes from androidx.graphics:graphics-path (transitive
             // Compose dep) and ships stripped, so AGP cannot extract symbols.
             // Play Console's "native debug symbols" warning is inherent here.
-            // Confirmed best practice: accept the warning. AGP docs explicitly
-            // call out the pre-stripped-vendor-AAR case — it cannot be fixed at
-            // the consumer side. See https://developer.android.com/build/include-native-symbols
+            // Re-verified 2026-06-05 on AGP 9.2.1: debugSymbolLevel=SYMBOL_TABLE
+            // yields no BUNDLE-METADATA debugsymbols entry — the .so has no
+            // .symtab to extract. Accept the warning; it is informational only.
+            // See https://developer.android.com/build/include-native-symbols
             // Only attach signing config when the env vars are present (i.e. in CI)
             if (!System.getenv("KEYSTORE_PATH").isNullOrBlank()) {
                 signingConfig = signingConfigs.getByName("release")
