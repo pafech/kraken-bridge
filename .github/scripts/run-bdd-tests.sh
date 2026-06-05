@@ -14,6 +14,20 @@ adb shell settings put secure enabled_accessibility_services \
 adb shell settings put secure accessibility_enabled 1
 sleep 2
 
+# Pin the screen on for the whole suite. The screen-off timer starts at
+# emulator boot and nothing else resets it; once the panel sleeps, the
+# foreground activity stops and its accessibility tree empties, so every
+# UiAutomator By.text lookup fails — the UI-driven scenarios go red while
+# service-reflection scenarios still pass (seen as the intermittent
+# disclosure-gate failures in runs 27012024159 / 27015010287).
+# stayon=true keeps the screen awake while powered (an emulator always is);
+# wakeup + dismiss-keyguard recover if it already slept during the build.
+adb shell svc power stayon true
+adb shell input keyevent KEYCODE_WAKEUP
+adb shell wm dismiss-keyguard
+# Diagnostic breadcrumb for any future flake hunt: expect Awake here.
+adb shell dumpsys power | grep -E "mWakefulness=" || true
+
 # Run Cucumber scenarios – exclude device-only and manual tags.
 # Important: pass the entire `am instrument` invocation as ONE single-quoted
 # string. `adb shell` does not preserve client-side quoting — args are
