@@ -117,7 +117,11 @@ class AccessibilityDisclosureSteps {
         const val PREFS_UI_HINTS = "kraken_ui_hints"
         const val KEY_A11Y_DISCLOSURE_ACCEPTED = "a11y_disclosure_accepted"
         const val GATE_TITLE = "Accessibility access"
-        const val LAUNCH_TIMEOUT_MS = 10_000L
+        // Failure deadline, not a delay: Until.hasObject returns the moment
+        // the gate renders, so green runs never wait this long. Generous on
+        // purpose — a cold launch on a busy CI emulator missed a 10 s
+        // deadline once (run 27012024159) and produced a false red.
+        const val LAUNCH_TIMEOUT_MS = 20_000L
         const val UI_TIMEOUT_MS = 5_000L
     }
 }
