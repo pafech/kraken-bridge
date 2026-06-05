@@ -35,6 +35,13 @@ adb shell dumpsys power | grep -E "mWakefulness=" || true
 # `not @device-only and not @manual` into bare tokens and trip am's parser
 # (manifests as `Error: Invalid userId -2`). The single-quoted form keeps
 # the quoting intact for the device-side shell.
+# Capture the full instrumentation output host-side. This is the BDD
+# report artifact: cucumber-android prints every scenario with its result
+# here, and unlike an on-device XML file it survives the emulator teardown
+# that android-emulator-runner performs as soon as this script exits
+# (which is why a post-step `adb pull` always found nothing).
+mkdir -p bdd-reports
+
 set +e
 # `optionsAnnotationPackage` tells cucumber-android where to find the
 # @CucumberOptions class (CucumberRunner lives in `ch.fbc.krakenbridge.bdd`,
@@ -46,7 +53,7 @@ adb shell "am instrument -w \
   -e tags 'not @device-only and not @manual' \
   -e optionsAnnotationPackage ch.fbc.krakenbridge.bdd \
   ch.fbc.krakenbridge.test/ch.fbc.krakenbridge.bdd.CucumberRunner" \
-  | tee /tmp/bdd-output.txt
+  | tee bdd-reports/instrument-output.txt
 # `$?` after a pipe is the exit code of the last pipe member (tee), which
 # always succeeds. PIPESTATUS[0] is what we actually care about.
 INSTRUMENT_EXIT=${PIPESTATUS[0]}
@@ -62,16 +69,16 @@ fi
 #    runner never actually executed — e.g. `Error: Invalid userId -2` on
 #    certain emulator images causes `am` to print its help and bail with
 #    a non-zero status that `tee` masks. Belt-and-braces.
-if ! grep -qE 'OK \([0-9]+ test|Tests run: [0-9]+' /tmp/bdd-output.txt; then
+if ! grep -qE 'OK \([0-9]+ test|Tests run: [0-9]+' bdd-reports/instrument-output.txt; then
   echo "::error::No JUnit summary in BDD output — instrumentation did not run."
-  echo "----- last 30 lines of /tmp/bdd-output.txt -----"
-  tail -30 /tmp/bdd-output.txt
+  echo "----- last 30 lines of bdd-reports/instrument-output.txt -----"
+  tail -30 bdd-reports/instrument-output.txt
   echo "------------------------------------------------"
   exit 1
 fi
 
 # 3. JUnit summary exists — fail on any reported failure.
-if grep -qE 'FAILURES|Error in' /tmp/bdd-output.txt; then
+if grep -qE 'FAILURES|Error in' bdd-reports/instrument-output.txt; then
   echo "::error::BDD test failures detected in output"
   exit 1
 fi

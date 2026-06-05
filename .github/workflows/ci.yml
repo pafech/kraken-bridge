@@ -126,11 +126,11 @@ jobs:
           # constructs (if/fi, variable capture, line continuations).
           script: bash .github/scripts/run-bdd-tests.sh
 
-      - name: Pull Cucumber XML reports
-        if: always()
-        run: |
-          adb pull /sdcard/cucumber-reports/ bdd-reports/ 2>/dev/null || true
-
+      # bdd-reports/ is written host-side by run-bdd-tests.sh (the tee'd
+      # `am instrument` output, one line per scenario). Don't try to
+      # `adb pull` anything here: android-emulator-runner shuts the
+      # emulator down when its script step ends, so the device is gone
+      # by the time any later step runs.
       - name: Upload BDD test results
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
