@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -51,83 +52,92 @@ fun AccessibilityConsentScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp, vertical = 32.dp)
+                .navigationBarsPadding()
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.Start
         ) {
-            Text(
-                text = "Accessibility access",
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
+            // Same brand header as every other screen — carries the
+            // statusBarsPadding() so content clears the system bars.
+            AppHeader(modifier = Modifier.fillMaxWidth())
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Column(
+                modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(
+                    text = "Accessibility access",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
 
-            Text(
-                text = "Kraken Dive Photo uses Android's Accessibility Service to " +
-                    "turn your Kraken housing's Bluetooth button presses into taps, " +
-                    "swipes, and system actions for your camera and gallery apps " +
-                    "while the phone is sealed in the housing underwater.",
-                fontSize = 15.sp,
-                lineHeight = 21.sp,
-                color = MaterialTheme.colorScheme.onBackground
-            )
+                Spacer(modifier = Modifier.height(12.dp))
 
-            Spacer(modifier = Modifier.height(18.dp))
+                Text(
+                    text = "Kraken Dive Photo uses Android's Accessibility Service to " +
+                        "turn your Kraken housing's Bluetooth button presses into taps, " +
+                        "swipes, and system actions for your camera and gallery apps " +
+                        "while the phone is sealed in the housing underwater.",
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
 
-            Text(
-                text = "If you agree, it will:",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            BulletText(
-                "Read the screen of the active camera or gallery app to find its " +
-                    "buttons (shutter, mode, delete, swipe)."
-            )
-            BulletText("Perform taps, swipes, and Back/Home on your behalf.")
+                Spacer(modifier = Modifier.height(18.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "If you agree, it will:",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                BulletText(
+                    "Read the screen of the active camera or gallery app to find its " +
+                        "buttons (shutter, mode, delete, swipe)."
+                )
+                BulletText("Perform taps, swipes, and Back/Home on your behalf.")
 
-            Text(
-                text = "It will not:",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            BulletText(
-                "Collect, store, or transmit any screen content or data — everything " +
-                    "stays on this device."
-            )
-            BulletText("Record audio or screenshots, or interact with any other app.")
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "It will not:",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                BulletText(
+                    "Collect, store, or transmit any screen content or data — everything " +
+                        "stays on this device."
+                )
+                BulletText("Record audio or screenshots, or interact with any other app.")
 
-            Text(
-                text = "Revoke this anytime in Android Settings → Accessibility, or " +
-                    "with the Accessibility row in this app.",
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                color = OceanTextMuted
-            )
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(28.dp))
+                Text(
+                    text = "Revoke this anytime in Android Settings → Accessibility, or " +
+                        "with the Accessibility row in this app.",
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = OceanTextMuted
+                )
 
-            // Two equally-prominent consent buttons. Decline does not exit the
-            // app — it dismisses the gate so the app stays usable with the
-            // AccessibilityService simply left off; the disclosure re-appears on
-            // the next launch (and whenever the user tries to enable the service)
-            // until consent is given. Back press still leaves the app, which we
-            // do NOT treat as consent.
-            ConsentActionButtons(
-                onAccept = onAccept,
-                onDecline = onDecline
-            )
+                Spacer(modifier = Modifier.height(28.dp))
 
-            Spacer(modifier = Modifier.height(24.dp))
+                // Two equally-prominent consent buttons. Decline does not exit the
+                // app — it dismisses the gate so the app stays usable with the
+                // AccessibilityService simply left off; the disclosure re-appears on
+                // the next launch (and whenever the user tries to enable the service)
+                // until consent is given. Back press still leaves the app, which we
+                // do NOT treat as consent.
+                ConsentActionButtons(
+                    onAccept = onAccept,
+                    onDecline = onDecline
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
         }
     }
 }
