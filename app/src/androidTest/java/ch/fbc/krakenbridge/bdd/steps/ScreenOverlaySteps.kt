@@ -128,11 +128,11 @@ class ScreenOverlaySteps {
     fun videoRecordingStarts() {
         val service = KrakenBleService.instance ?: error("Service not running")
         // Switch into video mode if needed, then trigger record-start.
-        if (!service.testIsVideoMode) {
+        if (!KrakenBleService.state.value.isVideoMode) {
             service.simulateButtonPress(KrakenBleService.BTN_FN_PRESS)
             Thread.sleep(800)
         }
-        if (!service.testIsRecording) {
+        if (!KrakenBleService.state.value.isRecording) {
             service.simulateButtonPress(KrakenBleService.BTN_SHUTTER_PRESS)
             Thread.sleep(500)
         }
@@ -146,7 +146,7 @@ class ScreenOverlaySteps {
     @When("the video recording stops")
     fun videoRecordingStops() {
         val service = KrakenBleService.instance ?: error("Service not running")
-        if (service.testIsRecording) {
+        if (KrakenBleService.state.value.isRecording) {
             service.simulateButtonPress(KrakenBleService.BTN_SHUTTER_PRESS)
             Thread.sleep(500)
         }
@@ -175,14 +175,14 @@ class ScreenOverlaySteps {
 
     @Given("the camera has not been opened yet this session")
     fun ensureCameraNotOpened() {
-        val service = KrakenBleService.instance ?: error("Service not running")
-        check(!service.testCameraIsOpen) { "Camera was already opened this session" }
+        KrakenBleService.instance ?: error("Service not running")
+        check(!KrakenBleService.state.value.isCameraOpen) { "Camera was already opened this session" }
     }
 
     @Then("the camera-open flag is still cleared")
     fun assertCameraOpenFlagCleared() {
-        val service = KrakenBleService.instance ?: error("Service not running")
-        check(!service.testCameraIsOpen) {
+        KrakenBleService.instance ?: error("Service not running")
+        check(!KrakenBleService.state.value.isCameraOpen) {
             "Camera-open flag was set — wake-tap was not absorbed"
         }
     }

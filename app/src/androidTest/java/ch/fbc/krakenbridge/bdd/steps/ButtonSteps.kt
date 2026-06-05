@@ -45,20 +45,20 @@ class ButtonSteps {
 
     @Then("the camera-open flag is set")
     fun assertCameraOpen() {
-        val s = service ?: return
-        check(s.testCameraIsOpen) { "Expected cameraIsOpen flag to be set" }
+        service ?: return
+        check(KrakenBleService.state.value.isCameraOpen) { "Expected isCameraOpen flag to be set" }
     }
 
     @Then("the recording flag is set to true")
     fun assertRecordingTrue() {
-        val s = service ?: return
-        check(s.testIsRecording) { "Expected recording to be in progress" }
+        service ?: return
+        check(KrakenBleService.state.value.isRecording) { "Expected recording to be in progress" }
     }
 
     @Then("the recording flag is set to false")
     fun assertRecordingFalse() {
-        val s = service ?: return
-        check(!s.testIsRecording) { "Expected recording to have stopped" }
+        service ?: return
+        check(!KrakenBleService.state.value.isRecording) { "Expected recording to have stopped" }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

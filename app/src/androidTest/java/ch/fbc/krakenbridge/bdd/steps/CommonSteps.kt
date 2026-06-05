@@ -59,10 +59,11 @@ class CommonSteps {
     @Given("the BLE service is connected and in photo mode")
     fun bleServiceConnectedPhotoMode() {
         // Service may not be bound in CI (no BLE hardware); we assert it is running
-        // only when it has been started. State reads use the companion instance.
-        val service = KrakenBleService.instance ?: return
-        check(!service.testIsVideoMode) { "Expected photo mode but service is in video mode" }
-        check(!service.testIsGalleryMode) { "Expected camera mode but service is in gallery mode" }
+        // only when it has been started. State reads use the service's state flow.
+        KrakenBleService.instance ?: return
+        val state = KrakenBleService.state.value
+        check(!state.isVideoMode) { "Expected photo mode but service is in video mode" }
+        check(!state.isGalleryMode) { "Expected camera mode but service is in gallery mode" }
     }
 
     @Given("the BLE service is connected and in camera mode")
@@ -70,51 +71,51 @@ class CommonSteps {
 
     @Given("the BLE service is in photo mode")
     fun assertInPhotoMode() {
-        val service = KrakenBleService.instance ?: return
-        check(!service.testIsVideoMode) { "Expected photo mode but service is in video mode" }
+        KrakenBleService.instance ?: return
+        check(!KrakenBleService.state.value.isVideoMode) { "Expected photo mode but service is in video mode" }
     }
 
     @Given("the BLE service is in video mode")
     fun assertInVideoMode() {
         val service = KrakenBleService.instance ?: return
-        if (!service.testIsVideoMode) {
+        if (!KrakenBleService.state.value.isVideoMode) {
             // Toggle into video mode
             service.simulateButtonPress(KrakenBleService.BTN_FN_PRESS)
             Thread.sleep(800) // allow mode-switch gesture to dispatch
         }
-        check(service.testIsVideoMode) { "Service failed to switch to video mode" }
+        check(KrakenBleService.state.value.isVideoMode) { "Service failed to switch to video mode" }
     }
 
     @Given("the BLE service is in gallery mode")
     fun assertInGalleryMode() {
         val service = KrakenBleService.instance ?: return
-        if (!service.testIsGalleryMode) {
+        if (!KrakenBleService.state.value.isGalleryMode) {
             service.simulateButtonPress(KrakenBleService.BTN_BACK_PRESS)
             Thread.sleep(1200)
         }
-        check(service.testIsGalleryMode) { "Service failed to switch to gallery mode" }
+        check(KrakenBleService.state.value.isGalleryMode) { "Service failed to switch to gallery mode" }
     }
 
     @Given("the BLE service is in camera mode")
     fun assertInCameraMode() {
-        val service = KrakenBleService.instance ?: return
-        check(!service.testIsGalleryMode) { "Expected camera mode but service is in gallery mode" }
+        KrakenBleService.instance ?: return
+        check(!KrakenBleService.state.value.isGalleryMode) { "Expected camera mode but service is in gallery mode" }
     }
 
     @Given("no recording is in progress")
     fun assertNotRecording() {
-        val service = KrakenBleService.instance ?: return
-        check(!service.testIsRecording) { "Expected no recording in progress" }
+        KrakenBleService.instance ?: return
+        check(!KrakenBleService.state.value.isRecording) { "Expected no recording in progress" }
     }
 
     @Given("a recording is in progress")
     fun assertRecordingInProgress() {
         val service = KrakenBleService.instance ?: return
-        if (!service.testIsRecording) {
+        if (!KrakenBleService.state.value.isRecording) {
             service.simulateButtonPress(KrakenBleService.BTN_SHUTTER_PRESS)
             Thread.sleep(500)
         }
-        check(service.testIsRecording) { "Service failed to start recording" }
+        check(KrakenBleService.state.value.isRecording) { "Service failed to start recording" }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

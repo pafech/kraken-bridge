@@ -136,8 +136,6 @@ class MainActivity : ComponentActivity() {
     // missing, the user denied → chain stops. Null means no chain running.
     private var cameraSetupAwaiting: String? = null
 
-    private var connectionStatus by mutableStateOf("disconnected")
-    private var statusMessage by mutableStateOf("")
     private var airplaneModeOn by mutableStateOf(false)
     private var bluetoothAdapterEnabled by mutableStateOf(false)
 
@@ -155,15 +153,6 @@ class MainActivity : ComponentActivity() {
     private var batteryOptimizationExempt by mutableStateOf(false)
     private var accessibilityEnabled by mutableStateOf(false)
     private var displayOverlayGranted by mutableStateOf(false)
-
-    private val statusReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            intent?.let {
-                connectionStatus = it.getStringExtra(KrakenBleService.EXTRA_STATUS) ?: "unknown"
-                statusMessage = it.getStringExtra(KrakenBleService.EXTRA_MESSAGE) ?: ""
-            }
-        }
-    }
 
     // Keeps the BT/airplane status chips truthful even when the user toggles
     // from Quick Settings (Activity stays resumed, so onResume won't refire).
@@ -284,6 +273,11 @@ class MainActivity : ComponentActivity() {
     private fun MainPager(initialPage: Int) {
         val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { 3 })
         val scope = rememberCoroutineScope()
+        // Live connection state straight from the BLE service. Unlike the
+        // status broadcast + on-resume replay this replaced, a StateFlow
+        // always delivers the current value on (re)subscription, so the UI
+        // can never show a stale status after returning from Camera/Photos.
+        val serviceState by KrakenBleService.state.collectAsState()
         var headerHeightPx by remember { mutableIntStateOf(0) }
         val headerInset = with(LocalDensity.current) { headerHeightPx.toDp() }
 
@@ -313,8 +307,8 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     1 -> MainScreen(
-                        status = connectionStatus,
-                        message = statusMessage,
+                        status = serviceState.status,
+                        message = serviceState.message,
                         bluetoothEnabled = bluetoothAdapterEnabled,
                         airplaneModeOn = airplaneModeOn,
                         cameraReady = cameraPermissionsReady(),
@@ -417,32 +411,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Status broadcast is package-internal (sender uses setPackage(packageName)),
-        // so the receiver must be NOT_EXPORTED. ContextCompat handles the API 33+
-        // flag requirement and the no-op behaviour on older releases.
-        val filter = IntentFilter(KrakenBleService.BROADCAST_STATUS)
-        ContextCompat.registerReceiver(
-            this, statusReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-        // Replay last broadcast status from disk: while the Activity was paused
-        // (typically the diver was in Camera or Photos), any state transitions
-        // the BleService emitted were missed by statusReceiver. Without this,
-        // returning to the app would show whatever string was set on last pause.
-        KrakenBleService.readLastStatus(this)?.let { (status, message) ->
-            connectionStatus = status
-            statusMessage = message
-        }
+        // Connection status needs no resume-sync: the UI collects
+        // KrakenBleService.state, which replays its current value on every
+        // (re)subscription. Only OS-owned state has to be polled here.
         accessibilityEnabled = isAccessibilityServiceEnabled()
         refreshPermissionState()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        try {
-            unregisterReceiver(statusReceiver)
-        } catch (e: IllegalArgumentException) {
-            // Receiver not registered
-        }
     }
 
     private fun refreshDiveReadiness() {

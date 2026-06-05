@@ -56,7 +56,7 @@ class CameraSteps {
     @Given("the camera is already open")
     fun assertCameraAlreadyOpen() {
         val service = KrakenBleService.instance ?: return
-        if (!service.testCameraIsOpen) {
+        if (!KrakenBleService.state.value.isCameraOpen) {
             service.simulateButtonPress(KrakenBleService.BTN_SHUTTER_PRESS)
             Thread.sleep(1_000)
         }
@@ -65,7 +65,7 @@ class CameraSteps {
     @Given("the camera is in photo mode")
     fun assertCameraPhotoMode() {
         val service = KrakenBleService.instance ?: return
-        if (service.testIsVideoMode) {
+        if (KrakenBleService.state.value.isVideoMode) {
             service.simulateButtonPress(KrakenBleService.BTN_FN_PRESS)
             Thread.sleep(800)
         }

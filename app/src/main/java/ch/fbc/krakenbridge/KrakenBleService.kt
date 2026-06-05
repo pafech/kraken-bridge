@@ -5,7 +5,6 @@ import android.app.*
 import android.bluetooth.*
 import android.bluetooth.le.*
 import android.content.BroadcastReceiver
-import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -25,6 +24,11 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import ch.fbc.krakenbridge.vendor.VendorRegistry
 import java.util.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 
 /**
  * Foreground BLE service for the Kraken housing.
@@ -90,28 +94,21 @@ class KrakenBleService : Service() {
         // SharedPreferences key for persisting last connected device MAC
         private const val PREFS_NAME = "kraken_ble"
         private const val PREF_LAST_DEVICE_MAC = "last_device_mac"
-        // Last broadcast status/message — replayed on Activity onResume so the
-        // UI doesn't show stale state when the diver returns from the camera.
-        private const val PREF_LAST_STATUS = "last_status"
-        private const val PREF_LAST_MESSAGE = "last_message"
-
-        // Broadcast actions
-        const val BROADCAST_STATUS = "ch.fbc.krakenbridge.STATUS_UPDATE"
-        const val EXTRA_STATUS = "status"
-        const val EXTRA_MESSAGE = "message"
 
         /**
-         * Read the last status/message that the service broadcast. Called by
-         * [MainActivity.onResume] to bring the UI back in sync after the
-         * Activity has been paused — statusReceiver only registers while
-         * resumed, so any broadcasts emitted in the meantime are otherwise lost.
+         * Single source of truth for the session state. Companion-level so
+         * the UI can collect it before the service exists and keeps the last
+         * value across service restarts within the same process — the
+         * Activity and the service always share one process, so unlike the
+         * status broadcast + SharedPreferences replay this replaced, a
+         * collector can never observe a state the service didn't just emit.
+         *
+         * Written by the service (GATT Binder thread or main thread — update
+         * is an atomic CAS), read by Compose ([MainActivity]) and by BDD step
+         * definitions.
          */
-        fun readLastStatus(context: Context): Pair<String, String>? {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val status = prefs.getString(PREF_LAST_STATUS, null) ?: return null
-            val message = prefs.getString(PREF_LAST_MESSAGE, "") ?: ""
-            return status to message
-        }
+        private val mutableState = MutableStateFlow(KrakenServiceState())
+        val state: StateFlow<KrakenServiceState> = mutableState.asStateFlow()
     }
 
     private var bluetoothAdapter: BluetoothAdapter? = null
@@ -156,18 +153,10 @@ class KrakenBleService : Service() {
     }
     private var screenReceiverRegistered = false
 
-    // Camera mode tracking: false = photo, true = video
-    @Volatile private var isVideoMode = false
+    // Mode / recording / camera-open flags live in [KrakenServiceState] —
+    // read them via currentState, mutate via mutableState.update { }.
+    private val currentState: KrakenServiceState get() = mutableState.value
 
-    // Track if currently recording video
-    @Volatile private var isRecording = false
-
-    // App mode tracking: false = camera, true = gallery/photos
-    @Volatile private var isGalleryMode = false
-
-    // Track if camera app is already open (first shutter just opens, subsequent take photo)
-    @Volatile private var cameraIsOpen = false
-    
     // Deduplication for button events (both legacy and new callbacks may fire)
     private var lastButtonCode = -1
     private var lastButtonTime = 0L
@@ -222,7 +211,7 @@ class KrakenBleService : Service() {
 
         override fun onScanFailed(errorCode: Int) {
             Log.e(TAG, "Scan failed with error: $errorCode")
-            broadcastStatus("error", "Scan failed: $errorCode")
+            updateStatus(ConnectionStatus.Error, "Scan failed: $errorCode")
         }
     }
 
@@ -234,7 +223,7 @@ class KrakenBleService : Service() {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     Log.i(TAG, "Connected to Kraken")
-                    broadcastStatus("connected", "Connected to Kraken")
+                    updateStatus(ConnectionStatus.Connected, "Connected to Kraken")
                     acquireConnectionWakeLock()
                     lastConnectedDevice = gatt.device
                     persistDeviceMac(gatt.device.address)
@@ -256,10 +245,10 @@ class KrakenBleService : Service() {
                     
                     if (isUserDisconnect) {
                         // User requested disconnect
-                        broadcastStatus("disconnected", "Disconnected")
+                        updateStatus(ConnectionStatus.Disconnected, "Disconnected")
                     } else {
                         // Unexpected disconnect - try to reconnect
-                        broadcastStatus("reconnecting", "Connection lost - reconnecting...")
+                        updateStatus(ConnectionStatus.Reconnecting, "Connection lost - reconnecting...")
                         attemptReconnect()
                     }
                 }
@@ -273,7 +262,7 @@ class KrakenBleService : Service() {
                 enableButtonNotifications(gatt)
             } else {
                 Log.e(TAG, "Service discovery failed: $status")
-                broadcastStatus("error", "Service discovery failed")
+                updateStatus(ConnectionStatus.Error, "Service discovery failed")
             }
         }
 
@@ -304,14 +293,14 @@ class KrakenBleService : Service() {
         ) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.i(TAG, "Notifications enabled successfully")
-                val modeName = if (isVideoMode) "VIDEO" else "PHOTO"
-                broadcastStatus("ready", "Ready - $modeName mode")
+                val modeName = if (currentState.isVideoMode) "VIDEO" else "PHOTO"
+                updateStatus(ConnectionStatus.Ready, "Ready - $modeName mode")
             } else {
                 // CCCD write failed: GATT is still connected but buttons won't fire.
                 // Force disconnect so the standard reconnect path runs — otherwise
                 // the notification keeps saying "Connected" with non-working buttons.
                 Log.e(TAG, "Failed to enable notifications: $status — forcing disconnect to retry")
-                broadcastStatus("error", "Failed to enable notifications")
+                updateStatus(ConnectionStatus.Error, "Failed to enable notifications")
                 gatt.disconnect()
             }
         }
@@ -325,7 +314,7 @@ class KrakenBleService : Service() {
                 gatt.close()
                 bluetoothGatt = null
                 if (!isUserDisconnect) {
-                    broadcastStatus("reconnecting", "Connection lost - reconnecting...")
+                    updateStatus(ConnectionStatus.Reconnecting, "Connection lost - reconnecting...")
                     attemptReconnect()
                 }
             }
@@ -443,10 +432,16 @@ class KrakenBleService : Service() {
     }
 
     private fun resetState() {
-        cameraIsOpen = false
-        isVideoMode = false
-        isRecording = false
-        isGalleryMode = false
+        // Status / message survive: this runs on ACTION_CONNECT right before
+        // the scan-status updates take over.
+        mutableState.update {
+            it.copy(
+                isVideoMode = false,
+                isGalleryMode = false,
+                isRecording = false,
+                isCameraOpen = false
+            )
+        }
         releaseVideoRecordingWakeLock()
         // Reset dedup so the first event after a reconnect is never silently dropped
         synchronized(this) {
@@ -536,7 +531,7 @@ class KrakenBleService : Service() {
         // error that crashes the foreground service. Guard explicitly.
         val adapter = bluetoothAdapter
         if (adapter == null || !adapter.isEnabled) {
-            broadcastStatus("error", "Turn on Bluetooth to connect")
+            updateStatus(ConnectionStatus.Error, "Turn on Bluetooth to connect")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
@@ -544,13 +539,13 @@ class KrakenBleService : Service() {
 
         val scanner = adapter.bluetoothLeScanner
         if (scanner == null) {
-            broadcastStatus("error", "Bluetooth not available")
+            updateStatus(ConnectionStatus.Error, "Bluetooth not available")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
         }
 
-        broadcastStatus("scanning", "Scanning for Kraken...")
+        updateStatus(ConnectionStatus.Scanning, "Scanning for Kraken...")
         
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -563,7 +558,7 @@ class KrakenBleService : Service() {
         handler.postDelayed({
             if (scanning && bluetoothGatt == null) {
                 stopScan()
-                broadcastStatus("error", "Kraken not found")
+                updateStatus(ConnectionStatus.Error, "Kraken not found")
             }
         }, 30000)
     }
@@ -575,7 +570,7 @@ class KrakenBleService : Service() {
     }
 
     private fun connectToDevice(device: BluetoothDevice) {
-        broadcastStatus("connecting", "Connecting to ${device.address}...")
+        updateStatus(ConnectionStatus.Connecting, "Connecting to ${device.address}...")
         // Deliberate use of the API-37-deprecated overload: the replacement
         // (BluetoothGattConnectionSettings + Executor) requires API 37 at
         // runtime and no available test device runs it, so a gated new path
@@ -591,14 +586,14 @@ class KrakenBleService : Service() {
         val service = gatt.getService(BUTTON_SERVICE_UUID)
         if (service == null) {
             Log.e(TAG, "Button service not found")
-            broadcastStatus("error", "Button service not found")
+            updateStatus(ConnectionStatus.Error, "Button service not found")
             return
         }
 
         val characteristic = service.getCharacteristic(BUTTON_CHAR_UUID)
         if (characteristic == null) {
             Log.e(TAG, "Button characteristic not found")
-            broadcastStatus("error", "Button characteristic not found")
+            updateStatus(ConnectionStatus.Error, "Button characteristic not found")
             return
         }
 
@@ -618,7 +613,7 @@ class KrakenBleService : Service() {
             }
         } else {
             Log.w(TAG, "CCCD descriptor not found, notifications may not work")
-            broadcastStatus("ready", "Connected (no CCCD)")
+            updateStatus(ConnectionStatus.Ready, "Connected (no CCCD)")
         }
     }
 
@@ -662,7 +657,7 @@ class KrakenBleService : Service() {
             wakeScreen()
         }
         
-        if (isGalleryMode) {
+        if (currentState.isGalleryMode) {
             // Gallery mode: navigate and manage photos
             handleGalleryButton(code)
         } else {
@@ -673,7 +668,7 @@ class KrakenBleService : Service() {
             // here also avoids swallowing the first Fn press while the
             // accessibility tree is still catching up to the current window.
             val needsCameraForeground = code in CAMERA_TAP_BUTTONS
-            if (needsCameraForeground && cameraIsOpen && !isCameraForeground()) {
+            if (needsCameraForeground && currentState.isCameraOpen && !isCameraForeground()) {
                 Log.i(TAG, "Button 0x${code.toString(16)} -> camera not foreground, refocusing")
                 openCamera()
                 return
@@ -698,15 +693,18 @@ class KrakenBleService : Service() {
     private fun handleCameraButton(code: Int) {
         when (code) {
             BTN_SHUTTER_PRESS -> {
-                if (!cameraIsOpen) {
+                val state = currentState
+                if (!state.isCameraOpen) {
                     // First press: just open camera
                     openCamera()
-                    cameraIsOpen = true
+                    mutableState.update { it.copy(isCameraOpen = true) }
                     Log.i(TAG, "Shutter pressed -> opened camera (first press)")
-                } else if (isVideoMode) {
+                } else if (state.isVideoMode) {
                     // Video mode: toggle recording
-                    isRecording = !isRecording
-                    if (isRecording) {
+                    val nowRecording = mutableState
+                        .updateAndGet { it.copy(isRecording = !it.isRecording) }
+                        .isRecording
+                    if (nowRecording) {
                         // Starting video recording - keep screen on
                         acquireVideoRecordingWakeLock()
                         Log.i(TAG, "Shutter pressed -> starting video recording")
@@ -796,22 +794,27 @@ class KrakenBleService : Service() {
     
     private fun toggleGalleryMode() {
         // If switching away from camera while recording, release wake lock
-        if (isRecording) {
-            isRecording = false
+        if (currentState.isRecording) {
+            mutableState.update { it.copy(isRecording = false) }
             releaseVideoRecordingWakeLock()
         }
 
-        isGalleryMode = !isGalleryMode
+        val state = mutableState.updateAndGet {
+            val toGallery = !it.isGalleryMode
+            it.copy(
+                isGalleryMode = toGallery,
+                // Entering gallery backgrounds the camera; returning re-opens it.
+                isCameraOpen = !toGallery
+            )
+        }
 
-        if (isGalleryMode) {
-            cameraIsOpen = false
+        if (state.isGalleryMode) {
             openPhotosApp()
             updateNotification("Gallery mode - review photos")
             Log.i(TAG, "Switched to GALLERY mode")
         } else {
             openCamera()
-            cameraIsOpen = true
-            val modeName = if (isVideoMode) "VIDEO" else "PHOTO"
+            val modeName = if (state.isVideoMode) "VIDEO" else "PHOTO"
             updateNotification("Ready - $modeName mode")
             Log.i(TAG, "Switched back to CAMERA mode")
             // Re-apply the previously active capture mode after the camera
@@ -822,7 +825,7 @@ class KrakenBleService : Service() {
             // checks the toggle's checked state and no-ops when already in the target
             // mode, so this is safe when modes happen to align.
             handler.postDelayed({
-                swipeToSwitchCameraMode(isVideoMode)
+                swipeToSwitchCameraMode(currentState.isVideoMode)
             }, 600)
         }
     }
@@ -836,7 +839,7 @@ class KrakenBleService : Service() {
      * camera package — the two can be different vendors on the same device.
      */
     private fun openPhotosApp() {
-        val latest = queryLatestMedia()
+        val latest = queryLatestMedia(contentResolver)
         val galleryPkg = resolveDefaultGalleryPackage(latest)
         val adapter = VendorRegistry.adapterFor(galleryPkg)
 
@@ -853,7 +856,7 @@ class KrakenBleService : Service() {
 
         if (latest == null && hasPartialMediaAccess()) {
             Log.w(TAG, "Partial media access detected — MediaStore returned empty")
-            broadcastStatus("ready", "Limited photo access — grant full access in app settings")
+            updateStatus(ConnectionStatus.Ready, "Limited photo access — grant full access in app settings")
             openAppSettings()
             return
         }
@@ -875,42 +878,6 @@ class KrakenBleService : Service() {
         }
         return packageManager.resolveActivity(probe, PackageManager.MATCH_DEFAULT_ONLY)
             ?.activityInfo?.packageName
-    }
-
-    /**
-     * Query MediaStore for the most recently added image or video.
-     * Returns the content URI and MIME type, or null if nothing is found.
-     * The MIME type is required so ACTION_VIEW resolves to a gallery viewer
-     * that can render the URI directly in single-item view.
-     */
-    private fun queryLatestMedia(): Pair<Uri, String>? {
-        val collection = MediaStore.Files.getContentUri("external")
-        val projection = arrayOf(MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.MEDIA_TYPE)
-        val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (?, ?)"
-        val selectionArgs = arrayOf(
-            MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
-            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString()
-        )
-        val sortOrder = "${MediaStore.Files.FileColumns.DATE_ADDED} DESC"
-
-        contentResolver.query(collection, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID))
-                val mediaType = cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE))
-
-                val isVideo = mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
-                val contentUri = if (isVideo) {
-                    ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
-                } else {
-                    ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
-                }
-                val mimeType = if (isVideo) "video/*" else "image/*"
-
-                Log.d(TAG, "Latest media: id=$id, type=$mediaType, uri=$contentUri")
-                return Pair(contentUri, mimeType)
-            }
-        }
-        return null
     }
 
     /**
@@ -946,13 +913,15 @@ class KrakenBleService : Service() {
 
     private fun toggleCameraMode() {
         // If switching away from video mode while recording, release wake lock
-        if (isRecording) {
-            isRecording = false
+        if (currentState.isRecording) {
+            mutableState.update { it.copy(isRecording = false) }
             releaseVideoRecordingWakeLock()
         }
 
-        isVideoMode = !isVideoMode
-        val modeName = if (isVideoMode) "VIDEO" else "PHOTO"
+        val toVideo = mutableState
+            .updateAndGet { it.copy(isVideoMode = !it.isVideoMode) }
+            .isVideoMode
+        val modeName = if (toVideo) "VIDEO" else "PHOTO"
         Log.i(TAG, "Fn pressed -> switching to $modeName mode")
 
         // Open camera first
@@ -960,7 +929,7 @@ class KrakenBleService : Service() {
 
         // Then swipe to switch mode
         handler.postDelayed({
-            swipeToSwitchCameraMode(isVideoMode)
+            swipeToSwitchCameraMode(toVideo)
             updateNotification("Ready - $modeName mode")
         }, 600)
     }
@@ -1076,7 +1045,7 @@ class KrakenBleService : Service() {
         if (gatt == null) {
             Log.w(TAG, "Connection check: GATT is null, connection lost")
             stopConnectionMonitoring()  // Stop loop before reconnecting — prevents cascading attempts
-            broadcastStatus("reconnecting", "Connection lost - reconnecting...")
+            updateStatus(ConnectionStatus.Reconnecting, "Connection lost - reconnecting...")
             attemptReconnect()
             return
         }
@@ -1101,14 +1070,14 @@ class KrakenBleService : Service() {
         val device = lastConnectedDevice
         if (device == null) {
             Log.w(TAG, "Cannot reconnect: no last connected device")
-            broadcastStatus("disconnected", "Disconnected - press Connect to retry")
+            updateStatus(ConnectionStatus.Disconnected, "Disconnected - press Connect to retry")
             return
         }
 
         if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
             Log.w(TAG, "Max reconnect attempts ($MAX_RECONNECT_ATTEMPTS) reached — falling back to scan")
             reconnectAttempts = 0
-            broadcastStatus("scanning", "Reconnect failed - scanning for Kraken...")
+            updateStatus(ConnectionStatus.Scanning, "Reconnect failed - scanning for Kraken...")
             startScan()
             return
         }
@@ -1122,7 +1091,7 @@ class KrakenBleService : Service() {
         handler.postDelayed({
             reconnectScheduled = false
             if (bluetoothGatt == null && !isUserDisconnect) {
-                broadcastStatus("reconnecting", "Reconnecting... (attempt $reconnectAttempts)")
+                updateStatus(ConnectionStatus.Reconnecting, "Reconnecting... (attempt $reconnectAttempts)")
                 connectToDevice(device)
             }
         }, delay)
@@ -1155,7 +1124,7 @@ class KrakenBleService : Service() {
         clearPersistedDeviceMac()
         releaseResources()
         lastConnectedDevice = null
-        broadcastStatus("disconnected", "Disconnected")
+        updateStatus(ConnectionStatus.Disconnected, "Disconnected")
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -1165,9 +1134,9 @@ class KrakenBleService : Service() {
      * Called from [onDestroy] (system teardown) and [userDisconnect].
      */
     private fun releaseResources() {
-        cameraIsOpen = false
-        isGalleryMode = false
-        isRecording = false
+        mutableState.update {
+            it.copy(isGalleryMode = false, isRecording = false, isCameraOpen = false)
+        }
         reconnectScheduled = false
         stopScan()
         stopConnectionMonitoring()
@@ -1192,22 +1161,10 @@ class KrakenBleService : Service() {
         Log.d(TAG, "Cleared persisted device MAC")
     }
 
-    // ── Test-only hooks ──────────────────────────────────────────────────────
-    // These properties and methods expose internal state / entry points so that
-    // BDD step definitions can drive the service without a physical BLE housing.
-    // They are kept internal so they are invisible to consumers of the library.
-
-    /** Current camera-mode flag: false = photo, true = video. */
-    internal val testIsVideoMode: Boolean get() = isVideoMode
-
-    /** Current gallery-mode flag: false = camera, true = gallery/photos. */
-    internal val testIsGalleryMode: Boolean get() = isGalleryMode
-
-    /** Whether a video recording is currently in progress. */
-    internal val testIsRecording: Boolean get() = isRecording
-
-    /** Whether the camera app has already been opened at least once. */
-    internal val testCameraIsOpen: Boolean get() = cameraIsOpen
+    // ── Test seams ───────────────────────────────────────────────────────────
+    // State observation needs no seam: BDD step definitions read the same
+    // [state] flow production consumes. The two members below are deliberate
+    // *input* seams — entry points a test cannot reach otherwise.
 
     /**
      * Simulate receiving a hardware button press from the BLE housing.
@@ -1216,12 +1173,14 @@ class KrakenBleService : Service() {
      */
     internal fun simulateButtonPress(code: Int) = handleButtonEvent(code)
 
-    /** Query the most recent media file from MediaStore. */
-    internal fun testQueryLatestMedia(): Pair<Uri, String>? = queryLatestMedia()
-
-    /** Direct access to the screen overlay manager for BDD assertions. */
+    /**
+     * Direct access to the screen overlay manager for the @manual overlay
+     * scenarios (force-dim, shorten the idle timeout, read brightness).
+     */
     internal val testOverlayManager: KrakenScreenOverlayManager? get() =
         if (::overlayManager.isInitialized) overlayManager else null
+
+    // ────────────────────────────────────────────────────────────────────────
 
     /**
      * Forwarded from [KrakenAccessibilityService] when the diver touches the
@@ -1233,23 +1192,9 @@ class KrakenBleService : Service() {
         if (::overlayManager.isInitialized) overlayManager.onUserActivity()
     }
 
-    // ────────────────────────────────────────────────────────────────────────
-
-    private fun broadcastStatus(status: String, message: String) {
+    /** Publish a connection-status transition to the notification and [state]. */
+    private fun updateStatus(status: ConnectionStatus, message: String) {
         updateNotification(message)
-
-        // Persist before broadcasting so a slow resume reading after the
-        // broadcast still sees the latest state, not the previous one.
-        prefs.edit {
-            putString(PREF_LAST_STATUS, status)
-            putString(PREF_LAST_MESSAGE, message)
-        }
-
-        val intent = Intent(BROADCAST_STATUS).apply {
-            putExtra(EXTRA_STATUS, status)
-            putExtra(EXTRA_MESSAGE, message)
-            setPackage(packageName)
-        }
-        sendBroadcast(intent)
+        mutableState.update { it.copy(status = status, message = message) }
     }
 }

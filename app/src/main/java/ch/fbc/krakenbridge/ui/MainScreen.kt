@@ -40,12 +40,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ch.fbc.krakenbridge.ConnectionStatus
 
 private enum class ConnectionPhase { Idle, Busy, Ready }
 
 @Composable
 fun MainScreen(
-    status: String,
+    status: ConnectionStatus,
     message: String,
     bluetoothEnabled: Boolean,
     airplaneModeOn: Boolean,
@@ -56,9 +57,13 @@ fun MainScreen(
     onToggleAirplaneMode: () -> Unit
 ) {
     val phase = when (status) {
-        "scanning", "connecting", "reconnecting" -> ConnectionPhase.Busy
-        "connected", "ready" -> ConnectionPhase.Ready
-        else -> ConnectionPhase.Idle
+        ConnectionStatus.Scanning,
+        ConnectionStatus.Connecting,
+        ConnectionStatus.Reconnecting -> ConnectionPhase.Busy
+        ConnectionStatus.Connected,
+        ConnectionStatus.Ready -> ConnectionPhase.Ready
+        ConnectionStatus.Disconnected,
+        ConnectionStatus.Error -> ConnectionPhase.Idle
     }
     val readyToConnect = cameraReady && bluetoothEnabled
     var btFlashTrigger by remember { mutableStateOf(0) }
@@ -120,7 +125,7 @@ fun MainScreen(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = status.replaceFirstChar { it.uppercase() },
+                    text = status.name,
                     fontSize = 28.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground
@@ -142,10 +147,10 @@ fun MainScreen(
 // beyond the status word (errors, "Limited photo access…"); otherwise
 // fall back to per-phase guidance. Permission gaps take precedence — the
 // connect path is unreachable until Camera-required perms are granted.
-private fun subInfo(phase: ConnectionPhase, status: String, message: String, cameraReady: Boolean): String {
+private fun subInfo(phase: ConnectionPhase, status: ConnectionStatus, message: String, cameraReady: Boolean): String {
     if (!cameraReady) return "Permissions needed\nSwipe left to Settings"
     val carriesNewInfo = message.isNotBlank() &&
-        !message.lowercase().startsWith(status.lowercase())
+        !message.lowercase().startsWith(status.name.lowercase())
     if (carriesNewInfo) return message
     return when (phase) {
         ConnectionPhase.Idle -> "Tap the circle to connect"

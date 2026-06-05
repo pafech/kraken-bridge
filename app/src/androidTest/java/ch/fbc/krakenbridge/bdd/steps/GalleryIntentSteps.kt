@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
-import ch.fbc.krakenbridge.KrakenBleService
 import io.cucumber.java.en.And
 import io.cucumber.java.en.Given
 import io.cucumber.java.en.Then
@@ -64,13 +63,9 @@ class GalleryIntentSteps {
 
     @When("the latest media is queried")
     fun queryLatestMedia() {
-        val service = KrakenBleService.instance
-        if (service != null) {
-            queryResult = service.testQueryLatestMedia()
-        } else {
-            // Service not running — query directly via contentResolver as fallback
-            queryResult = queryLatestMediaDirect()
-        }
+        // Same top-level function KrakenBleService.openPhotosApp() uses —
+        // no running service required.
+        queryResult = ch.fbc.krakenbridge.queryLatestMedia(context.contentResolver)
     }
 
     @When("the gallery intent is constructed for the latest media")
@@ -131,45 +126,4 @@ class GalleryIntentSteps {
         )
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
-
-    /** Direct MediaStore query — mirrors KrakenBleService.queryLatestMedia() logic. */
-    private fun queryLatestMediaDirect(): Pair<Uri, String>? {
-        val collection = MediaStore.Files.getContentUri("external")
-        val projection = arrayOf(
-            MediaStore.Files.FileColumns._ID,
-            MediaStore.Files.FileColumns.MEDIA_TYPE
-        )
-        val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (?, ?)"
-        val selectionArgs = arrayOf(
-            MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
-            MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString()
-        )
-        val sortOrder = "${MediaStore.Files.FileColumns.DATE_ADDED} DESC"
-
-        context.contentResolver.query(collection, projection, selection, selectionArgs, sortOrder)
-            ?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val id = cursor.getLong(
-                        cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
-                    )
-                    val mediaType = cursor.getInt(
-                        cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
-                    )
-                    val isVideo = mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
-                    val contentUri = if (isVideo) {
-                        android.content.ContentUris.withAppendedId(
-                            MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id
-                        )
-                    } else {
-                        android.content.ContentUris.withAppendedId(
-                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id
-                        )
-                    }
-                    val mimeType = if (isVideo) "video/*" else "image/*"
-                    return Pair(contentUri, mimeType)
-                }
-            }
-        return null
-    }
 }
