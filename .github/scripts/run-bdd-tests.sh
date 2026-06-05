@@ -25,6 +25,9 @@ sleep 2
 adb shell svc power stayon true
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
+# Start the suite with an empty log so the logcat artifact below covers
+# exactly this run.
+adb logcat -c || true
 # Diagnostic breadcrumb for any future flake hunt: expect Awake here.
 adb shell dumpsys power | grep -E "mWakefulness=" || true
 
@@ -58,6 +61,11 @@ adb shell "am instrument -w \
 # always succeeds. PIPESTATUS[0] is what we actually care about.
 INSTRUMENT_EXIT=${PIPESTATUS[0]}
 set -e
+
+# Always capture the device log next to the instrumentation output —
+# crashes, background-activity-launch denials, and the disclosure-gate
+# relaunch WARN (grep BDDTest) only show up here, not in am's output.
+adb logcat -d > bdd-reports/logcat.txt || true
 
 # 1. `am instrument` itself must exit 0.
 if [ "$INSTRUMENT_EXIT" -ne 0 ]; then

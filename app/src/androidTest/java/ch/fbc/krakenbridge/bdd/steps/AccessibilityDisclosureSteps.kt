@@ -53,13 +53,30 @@ class AccessibilityDisclosureSteps {
             ?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
             ?: error("No launch intent for ${targetContext.packageName}")
         targetContext.startActivity(intent)
-        device.wait(Until.hasObject(By.text(GATE_TITLE)), LAUNCH_TIMEOUT_MS)
+        if (!device.wait(Until.hasObject(By.text(GATE_TITLE)), LAUNCH_TIMEOUT_MS)) {
+            // The gate intermittently fails to appear on the CI emulator even
+            // though this is the app's first launch of the suite (runs
+            // 27012024159, 27015010287, 27022762323, 27024033854, 27026645611
+            // — across app-identical commits, so it is environmental, not a
+            // regression). Diagnose loudly, then retry the launch once: a
+            // second explicit start recovers both a swallowed first intent
+            // and a stalled cold start. The WARN below is the marker to grep
+            // for in bdd-reports/logcat.txt when hunting the root cause.
+            android.util.Log.w(
+                "BDDTest",
+                "Disclosure gate missing after ${LAUNCH_TIMEOUT_MS}ms " +
+                    "(foreground=${device.currentPackageName}) — relaunching once"
+            )
+            targetContext.startActivity(intent)
+            device.wait(Until.hasObject(By.text(GATE_TITLE)), LAUNCH_TIMEOUT_MS)
+        }
     }
 
     @When("the user taps {string} on the disclosure gate")
     fun tapButton(label: String) {
         check(device.wait(Until.hasObject(By.text(label)), UI_TIMEOUT_MS)) {
-            "Disclosure button \"$label\" never appeared"
+            "Disclosure button \"$label\" never appeared " +
+                "(foreground=${device.currentPackageName})"
         }
         device.findObject(By.text(label)).click()
     }
@@ -69,7 +86,8 @@ class AccessibilityDisclosureSteps {
     @Then("the accessibility disclosure gate is shown")
     fun gateShown() {
         check(device.wait(Until.hasObject(By.text(GATE_TITLE)), UI_TIMEOUT_MS)) {
-            "Disclosure gate (\"$GATE_TITLE\") was not shown after launch"
+            "Disclosure gate (\"$GATE_TITLE\") was not shown after launch " +
+                "(foreground=${device.currentPackageName})"
         }
     }
 
