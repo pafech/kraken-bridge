@@ -19,7 +19,6 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import java.util.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,33 +50,6 @@ class KrakenBleService : Service() {
         @Volatile
         var instance: KrakenBleService? = null
             private set
-
-        // Kraken housing BLE identifiers
-        const val DEVICE_NAME = "Kraken"
-
-        // Nordic LED Button Service
-        val BUTTON_SERVICE_UUID: UUID = UUID.fromString("00001523-1212-efde-1523-785feabcd123")
-        val BUTTON_CHAR_UUID: UUID = UUID.fromString("00001524-1212-efde-1523-785feabcd123")
-
-        // Client Characteristic Configuration Descriptor (for enabling notifications)
-        val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-
-        // Button codes (high nibble = button ID, low nibble = state)
-        const val BTN_SHUTTER_PRESS = 0x21
-        const val BTN_SHUTTER_RELEASE = 0x20
-        const val BTN_FN_PRESS = 0x62
-        const val BTN_FN_RELEASE = 0x61
-        const val BTN_BACK_PRESS = 0x11
-        const val BTN_BACK_RELEASE = 0x10
-        const val BTN_PLUS_PRESS = 0x41
-        const val BTN_PLUS_RELEASE = 0x40
-        const val BTN_OK_PRESS = 0x31
-        const val BTN_OK_RELEASE = 0x30
-        const val BTN_MINUS_PRESS = 0x51
-        const val BTN_MINUS_RELEASE = 0x50
-
-        // Same-event window for the duplicate BLE callbacks (legacy + new)
-        const val DEBOUNCE_MS = 100L
 
         // Actions for binding
         const val ACTION_CONNECT = "ch.fbc.krakenbridge.CONNECT"
@@ -372,6 +344,9 @@ class KrakenBleService : Service() {
             }
             startActivity(intent)
         } catch (e: Exception) {
+            // Deliberately broad: a failed wake attempt must never take the
+            // dive session down with it — the camera key path still wakes
+            // most ROMs, so we log and carry on.
             Log.e(TAG, "wakeScreen: failed to launch wake activity: ${e.message}")
         }
     }

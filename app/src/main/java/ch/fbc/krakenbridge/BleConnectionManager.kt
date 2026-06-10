@@ -16,11 +16,8 @@ import android.content.Context
 import android.os.Build
 import android.os.Handler
 import android.util.Log
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BUTTON_CHAR_UUID
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BUTTON_SERVICE_UUID
-import ch.fbc.krakenbridge.KrakenBleService.Companion.CCCD_UUID
-import ch.fbc.krakenbridge.KrakenBleService.Companion.DEVICE_NAME
 import ch.fbc.krakenbridge.KrakenBleService.Companion.TAG
+import java.util.UUID
 
 /**
  * Everything BLE: scanning for the housing, the GATT connection, enabling
@@ -429,6 +426,9 @@ class BleConnectionManager(
                 Log.w(TAG, "Connection check: Failed to read RSSI")
             }
         } catch (e: Exception) {
+            // Deliberately broad: the periodic health check must never crash
+            // the dive session. Whatever the stack throws here, the next check
+            // or the disconnect callback picks up the real state.
             Log.e(TAG, "Connection check failed: ${e.message}")
         }
     }
@@ -465,5 +465,17 @@ class BleConnectionManager(
                 connectToDevice(device)
             }
         }, delay)
+    }
+
+    companion object {
+        // Kraken housing BLE identifiers
+        private const val DEVICE_NAME = "Kraken"
+
+        // Nordic LED Button Service
+        private val BUTTON_SERVICE_UUID: UUID = UUID.fromString("00001523-1212-efde-1523-785feabcd123")
+        private val BUTTON_CHAR_UUID: UUID = UUID.fromString("00001524-1212-efde-1523-785feabcd123")
+
+        // Client Characteristic Configuration Descriptor (for enabling notifications)
+        private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 }

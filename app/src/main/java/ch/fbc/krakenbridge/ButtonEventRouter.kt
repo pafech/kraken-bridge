@@ -2,11 +2,6 @@ package ch.fbc.krakenbridge
 
 import android.os.PowerManager
 import android.util.Log
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_MINUS_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_OK_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_PLUS_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_SHUTTER_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.DEBOUNCE_MS
 import ch.fbc.krakenbridge.KrakenBleService.Companion.TAG
 import kotlinx.coroutines.flow.StateFlow
 
@@ -80,6 +75,9 @@ class ButtonEventRouter(
     fun resetDebounce() = debouncer.reset()
 
     companion object {
+        // Same-event window for the duplicate BLE callbacks (legacy + new)
+        private const val DEBOUNCE_MS = 100L
+
         // Buttons whose handler injects a tap or key event into the camera's
         // accessibility tree. They require the camera to be the foreground
         // app; otherwise the dispatch lands in some other window and looks

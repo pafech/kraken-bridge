@@ -1,5 +1,6 @@
 package ch.fbc.krakenbridge
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -8,12 +9,6 @@ import android.provider.MediaStore
 import android.util.Log
 import android.view.KeyEvent
 import android.widget.Toast
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_BACK_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_FN_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_MINUS_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_OK_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_PLUS_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_SHUTTER_PRESS
 import ch.fbc.krakenbridge.KrakenBleService.Companion.TAG
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -140,7 +135,7 @@ class CameraController(
         Log.i(TAG, "Switched back to CAMERA mode")
         handler.postDelayed({
             swipeToSwitchCameraMode(state.value.isVideoMode)
-        }, 600)
+        }, MODE_SWIPE_DELAY_MS)
     }
 
     fun isCameraForeground(): Boolean {
@@ -163,8 +158,8 @@ class CameraController(
             }
             context.startActivity(intent)
             Log.i(TAG, "Opened default camera via STILL_IMAGE_CAMERA")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to open default camera: ${e.message}")
+        } catch (e: ActivityNotFoundException) {
+            Log.e(TAG, "No camera app handles STILL_IMAGE_CAMERA: ${e.message}")
         }
     }
 
@@ -185,7 +180,7 @@ class CameraController(
         handler.postDelayed({
             swipeToSwitchCameraMode(toVideo)
             updateNotification("Ready - $modeName mode")
-        }, 600)
+        }, MODE_SWIPE_DELAY_MS)
     }
 
     private fun swipeToSwitchCameraMode(toVideo: Boolean) {
@@ -215,5 +210,11 @@ class CameraController(
         return context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
             .map { it.activityInfo.packageName }
             .toSet()
+    }
+
+    companion object {
+        // Time for the freshly-launched camera to settle before the mode
+        // swipe is dispatched into its accessibility tree.
+        private const val MODE_SWIPE_DELAY_MS = 600L
     }
 }

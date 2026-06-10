@@ -166,6 +166,10 @@ class KrakenScreenOverlayManager(private val context: Context) {
         try {
             windowManager.addView(v, params)
         } catch (e: Exception) {
+            // Deliberately broad: addView can throw BadTokenException,
+            // SecurityException (permission revoked mid-session) and other
+            // WindowManager RuntimeExceptions. The overlay is best-effort —
+            // a failed attach must not crash the dive session.
             Log.e(TAG, "Failed to add overlay view", e)
             return
         }

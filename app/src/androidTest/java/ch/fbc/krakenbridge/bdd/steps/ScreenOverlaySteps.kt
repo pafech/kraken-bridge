@@ -2,6 +2,8 @@ package ch.fbc.krakenbridge.bdd.steps
 
 import android.content.Intent
 import androidx.test.platform.app.InstrumentationRegistry
+import ch.fbc.krakenbridge.BTN_FN_PRESS
+import ch.fbc.krakenbridge.BTN_SHUTTER_PRESS
 import ch.fbc.krakenbridge.KrakenBleService
 import io.cucumber.java.en.Given
 import io.cucumber.java.en.Then
@@ -129,11 +131,11 @@ class ScreenOverlaySteps {
         val service = KrakenBleService.instance ?: error("Service not running")
         // Switch into video mode if needed, then trigger record-start.
         if (!KrakenBleService.state.value.isVideoMode) {
-            service.simulateButtonPress(KrakenBleService.BTN_FN_PRESS)
+            service.simulateButtonPress(BTN_FN_PRESS)
             Thread.sleep(800)
         }
         if (!KrakenBleService.state.value.isRecording) {
-            service.simulateButtonPress(KrakenBleService.BTN_SHUTTER_PRESS)
+            service.simulateButtonPress(BTN_SHUTTER_PRESS)
             Thread.sleep(500)
         }
     }
@@ -147,7 +149,7 @@ class ScreenOverlaySteps {
     fun videoRecordingStops() {
         val service = KrakenBleService.instance ?: error("Service not running")
         if (KrakenBleService.state.value.isRecording) {
-            service.simulateButtonPress(KrakenBleService.BTN_SHUTTER_PRESS)
+            service.simulateButtonPress(BTN_SHUTTER_PRESS)
             Thread.sleep(500)
         }
     }

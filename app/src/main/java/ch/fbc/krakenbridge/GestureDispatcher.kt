@@ -43,6 +43,18 @@ class GestureDispatcher(
         }, null)
     }
 
+    /**
+     * Tap at screen-relative coordinates. Used by the vendor adapters'
+     * coordinate fallbacks so the ratio maths lives in one place and the
+     * ratios themselves stay named constants per adapter.
+     */
+    fun tapAtRatio(xRatio: Float, yRatio: Float) {
+        val x = screenWidth() * xRatio
+        val y = screenHeight() * yRatio
+        Log.i(TAG, "Ratio tap ($xRatio, $yRatio) -> ($x, $y)")
+        tap(x, y)
+    }
+
     fun swipe(
         startX: Float,
         startY: Float,

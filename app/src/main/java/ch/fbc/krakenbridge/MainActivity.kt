@@ -483,7 +483,9 @@ class MainActivity : ComponentActivity() {
             try {
                 revokeSelfPermissionsOnKill(mediaPerms)
                 queued += RevokePrompt.Gallery
-            } catch (e: Exception) {
+            } catch (e: IllegalArgumentException) {
+                // Thrown when a permission is not a runtime permission or not
+                // declared by this package — nothing to revoke then.
                 android.util.Log.w("MainActivity", "Permission revocation failed: ${e.message}")
             }
         }
@@ -833,28 +835,23 @@ class MainActivity : ComponentActivity() {
      */
     private fun requestDisplayOverlay() {
         if (displayOverlayGranted) return
-        val intent = Intent(
+        launchSystemSettings(
             Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            "package:$packageName".toUri()
+            "Allow Kraken Dive Photo to display over other apps"
         )
-        Toast.makeText(
-            this,
-            "Allow Kraken Dive Photo to display over other apps",
-            Toast.LENGTH_LONG
-        ).show()
-        systemSettingsLauncher.launch(intent)
     }
 
     private fun openAppDetailsSettings() {
-        val intent = Intent(
+        launchSystemSettings(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-            "package:$packageName".toUri()
+            "Grant the missing permission, then tap back to return"
         )
-        Toast.makeText(
-            this,
-            "Grant the missing permission, then tap back to return",
-            Toast.LENGTH_LONG
-        ).show()
+    }
+
+    /** Settings deep-link for this package, with a hint toast since the user leaves the app. */
+    private fun launchSystemSettings(action: String, hint: String) {
+        val intent = Intent(action, "package:$packageName".toUri())
+        Toast.makeText(this, hint, Toast.LENGTH_LONG).show()
         systemSettingsLauncher.launch(intent)
     }
 
@@ -875,7 +872,7 @@ class MainActivity : ComponentActivity() {
         }
         try {
             systemSettingsLauncher.launch(intent)
-        } catch (e: Exception) {
+        } catch (e: ActivityNotFoundException) {
             openAppDetailsSettings()
         }
     }

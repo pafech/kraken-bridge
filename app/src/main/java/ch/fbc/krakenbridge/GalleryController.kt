@@ -1,5 +1,6 @@
 package ch.fbc.krakenbridge
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,12 +10,6 @@ import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_BACK_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_FN_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_MINUS_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_OK_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_PLUS_PRESS
-import ch.fbc.krakenbridge.KrakenBleService.Companion.BTN_SHUTTER_PRESS
 import ch.fbc.krakenbridge.KrakenBleService.Companion.TAG
 import ch.fbc.krakenbridge.vendor.VendorRegistry
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -157,7 +152,7 @@ class GalleryController(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
-        } catch (e: Exception) {
+        } catch (e: ActivityNotFoundException) {
             Log.e(TAG, "Failed to open app settings: ${e.message}")
         }
     }

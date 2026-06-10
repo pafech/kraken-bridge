@@ -1,11 +1,11 @@
 package ch.fbc.krakenbridge.vendor
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import ch.fbc.krakenbridge.KrakenAccessibilityService
@@ -24,6 +24,18 @@ object StockAndroidAdapter : VendorAdapter {
 
     private const val PKG_GOOGLE_CAMERA = "com.google.android.GoogleCamera"
     private const val PKG_GOOGLE_PHOTOS = "com.google.android.apps.photos"
+
+    // Coordinate-fallback ratios (screen-relative), tuned on the Pixel build.
+    private const val SHUTTER_FALLBACK_Y = 0.75f
+    private const val MODE_ROW_Y = 0.92f
+    private const val MODE_PHOTO_X = 0.45f
+    private const val MODE_VIDEO_X = 0.55f
+    private const val TRASH_X = 0.875f
+    // 1.034 reaches into the navigation-bar region where Google Photos
+    // renders its action buttons on gesture-nav devices.
+    private const val TRASH_Y = 1.034f
+    private const val CONFIRM_X = 0.3f
+    private const val CONFIRM_Y = 0.94f
 
     override fun handlesPackage(packageName: String): Boolean =
         packageName == PKG_GOOGLE_CAMERA || packageName == PKG_GOOGLE_PHOTOS
@@ -51,10 +63,7 @@ object StockAndroidAdapter : VendorAdapter {
         }
 
         Log.w(TAG, "Could not find shutter button, using fallback coordinates")
-        val x = svc.screenWidth / 2f
-        val y = svc.screenHeight * 0.75f
-        Log.i(TAG, "Tapping shutter at fallback position ($x, $y)")
-        svc.dispatchTap(x, y)
+        svc.dispatchTapAtRatio(0.5f, SHUTTER_FALLBACK_Y)
     }
 
     override fun modeSwitch(svc: KrakenAccessibilityService, toVideo: Boolean) {
@@ -94,10 +103,7 @@ object StockAndroidAdapter : VendorAdapter {
         }
 
         Log.w(TAG, "Could not find $targetMode mode toggle, using fallback coordinates")
-        val y = svc.screenHeight * 0.92f
-        val x: Float = if (toVideo) svc.screenWidth * 0.55f else svc.screenWidth * 0.45f
-        Log.i(TAG, "Tapping $targetMode icon at fallback position ($x, $y)")
-        svc.dispatchTap(x, y)
+        svc.dispatchTapAtRatio(if (toVideo) MODE_VIDEO_X else MODE_PHOTO_X, MODE_ROW_Y)
     }
 
     /**
@@ -126,8 +132,13 @@ object StockAndroidAdapter : VendorAdapter {
             ctx.startActivity(intent)
             Log.i(TAG, "Opened $uri ($mimeType) in ${targetPackage ?: "default"}")
             true
-        } catch (e: Exception) {
+        } catch (e: ActivityNotFoundException) {
             Log.e(TAG, "No viewer available for $uri in $targetPackage: ${e.message}")
+            false
+        } catch (e: SecurityException) {
+            // setPackage pins the launch into another app — a viewer update
+            // can stop exporting the activity the intent resolves to.
+            Log.e(TAG, "Viewer in $targetPackage not launchable: ${e.message}")
             false
         }
     }
@@ -244,13 +255,8 @@ object StockAndroidAdapter : VendorAdapter {
             }
         }
 
-        // Coordinate fallback: 1.034f reaches into the navigation-bar region
-        // where Google Photos renders its action buttons on gesture-nav devices.
         Log.w(TAG, "All accessibility strategies failed, using coordinate fallback")
-        val trashX = svc.screenWidth * 0.875f
-        val trashY = svc.screenHeight * 1.034f
-        Log.i(TAG, "Tapping trash at fallback coordinates ($trashX, $trashY)")
-        svc.dispatchTap(trashX, trashY)
+        svc.dispatchTapAtRatio(TRASH_X, TRASH_Y)
         return true
     }
 
@@ -281,14 +287,10 @@ object StockAndroidAdapter : VendorAdapter {
         }
 
         Log.w(TAG, "Could not find confirm button, using fallback coordinates")
-        val confirmX = svc.screenWidth * 0.3f
-        val confirmY = svc.screenHeight * 0.94f
-        Log.i(TAG, "Tapping confirm at fallback position ($confirmX, $confirmY)")
-        svc.dispatchTap(confirmX, confirmY)
+        svc.dispatchTapAtRatio(CONFIRM_X, CONFIRM_Y)
         return true
     }
 
-    private val mainHandler = Handler(Looper.getMainLooper())
     private val DELETE_LABELS = listOf(
         "Delete", "Move to bin", "Move to trash", "Bin", "Trash",
         "Löschen", "Papierkorb", "Supprimer", "Eliminar"
@@ -354,7 +356,7 @@ object StockAndroidAdapter : VendorAdapter {
                 @Suppress("DEPRECATION")
                 svc.packageManager.getPackageInfo(PKG_GOOGLE_PHOTOS, 0).versionCode.toLong()
             }
-        } catch (e: Exception) {
+        } catch (e: PackageManager.NameNotFoundException) {
             -1L
         }
     }

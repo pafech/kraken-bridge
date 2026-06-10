@@ -1,12 +1,11 @@
 package ch.fbc.krakenbridge.vendor
 
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
 import android.net.Uri
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import ch.fbc.krakenbridge.KrakenAccessibilityService
@@ -34,7 +33,13 @@ object SamsungAdapter : VendorAdapter {
     private const val ID_GALLERY_THUMB = "$PKG_SAMSUNG_GALLERY:id/recycler_view_item"
     private const val ACTIVITY_GALLERY_MAIN = "com.sec.android.gallery3d.app.GalleryActivity"
 
-    private val mainHandler = Handler(Looper.getMainLooper())
+    // Coordinate-fallback ratios, captured at 1080x2400 on One UI 5.1.
+    // Screen-relative so they scale to other Samsung resolutions.
+    private const val SHUTTER_FALLBACK_Y = 0.85f
+    private const val TRASH_X = 0.687f     // ≈ 742 / 1080
+    private const val TRASH_Y = 0.937f     // ≈ 2248 / 2400
+    private const val CONFIRM_X = 0.636f   // ≈ 687 / 1080
+    private const val CONFIRM_Y = 0.919f   // ≈ 2206 / 2400
 
     override fun handlesPackage(packageName: String): Boolean =
         packageName == PKG_SAMSUNG_CAMERA || packageName == PKG_SAMSUNG_GALLERY
@@ -60,11 +65,8 @@ object SamsungAdapter : VendorAdapter {
             }
         }
 
-        // Captured at 1080x2400; scale relative to screen for other Samsung models.
-        val x = svc.screenWidth / 2f
-        val y = svc.screenHeight * 0.85f
-        Log.w(TAG, "Shutter node not found; coordinate fallback ($x, $y)")
-        svc.dispatchTap(x, y)
+        Log.w(TAG, "Shutter node not found; coordinate fallback")
+        svc.dispatchTapAtRatio(0.5f, SHUTTER_FALLBACK_Y)
     }
 
     /**
@@ -154,9 +156,7 @@ object SamsungAdapter : VendorAdapter {
         }
 
         Log.w(TAG, "No trash node found; coordinate fallback")
-        val x = svc.screenWidth * 0.687f   // ≈ 742 / 1080
-        val y = svc.screenHeight * 0.937f  // ≈ 2248 / 2400
-        svc.dispatchTap(x, y)
+        svc.dispatchTapAtRatio(TRASH_X, TRASH_Y)
         return true
     }
 
@@ -198,8 +198,13 @@ object SamsungAdapter : VendorAdapter {
                 scheduleFirstThumbnailTap(svc, attemptsLeft = 15, delayMs = 600L)
             }
             true
-        } catch (e: Exception) {
+        } catch (e: ActivityNotFoundException) {
             Log.e(TAG, "Failed to launch Samsung Gallery: ${e.message}")
+            false
+        } catch (e: SecurityException) {
+            // setComponent targets another app's activity — a One UI update
+            // can stop exporting GalleryActivity.
+            Log.e(TAG, "Samsung Gallery activity not launchable: ${e.message}")
             false
         }
     }
@@ -281,9 +286,7 @@ object SamsungAdapter : VendorAdapter {
         }
 
         Log.w(TAG, "No confirm node found; coordinate fallback")
-        val x = svc.screenWidth * 0.636f   // ≈ 687 / 1080
-        val y = svc.screenHeight * 0.919f  // ≈ 2206 / 2400
-        svc.dispatchTap(x, y)
+        svc.dispatchTapAtRatio(CONFIRM_X, CONFIRM_Y)
         return true
     }
 }

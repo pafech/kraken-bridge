@@ -150,7 +150,7 @@ class KrakenAccessibilityService : AccessibilityService() {
         instance = null
         try {
             unregisterReceiver(keyReceiver)
-        } catch (e: Exception) {
+        } catch (e: IllegalArgumentException) {
             // Receiver not registered
         }
         Log.i(TAG, "Accessibility service destroyed")
@@ -338,6 +338,9 @@ class KrakenAccessibilityService : AccessibilityService() {
     fun dumpAccessibilityTree() = nodes.dumpTree()
 
     internal fun dispatchTap(x: Float, y: Float) = gestures.tap(x, y)
+
+    internal fun dispatchTapAtRatio(xRatio: Float, yRatio: Float) =
+        gestures.tapAtRatio(xRatio, yRatio)
 
     internal fun dispatchSwipe(
         startX: Float,

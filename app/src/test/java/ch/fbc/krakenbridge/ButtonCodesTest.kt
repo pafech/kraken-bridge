@@ -18,8 +18,8 @@ class ButtonCodesTest {
 
     @Test
     fun `first byte is the code`() {
-        assertEquals(KrakenBleService.BTN_SHUTTER_PRESS, buttonCodeFrom(byteArrayOf(0x21)))
-        assertEquals(KrakenBleService.BTN_FN_PRESS, buttonCodeFrom(byteArrayOf(0x62)))
+        assertEquals(BTN_SHUTTER_PRESS, buttonCodeFrom(byteArrayOf(0x21)))
+        assertEquals(BTN_FN_PRESS, buttonCodeFrom(byteArrayOf(0x62)))
     }
 
     @Test

@@ -5,6 +5,8 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import ch.fbc.krakenbridge.KrakenAccessibilityService
+import ch.fbc.krakenbridge.BTN_FN_PRESS
+import ch.fbc.krakenbridge.BTN_SHUTTER_PRESS
 import ch.fbc.krakenbridge.KrakenBleService
 import io.cucumber.java.en.Given
 import io.cucumber.java.en.Then
@@ -57,7 +59,7 @@ class CameraSteps {
     fun assertCameraAlreadyOpen() {
         val service = KrakenBleService.instance ?: return
         if (!KrakenBleService.state.value.isCameraOpen) {
-            service.simulateButtonPress(KrakenBleService.BTN_SHUTTER_PRESS)
+            service.simulateButtonPress(BTN_SHUTTER_PRESS)
             Thread.sleep(1_000)
         }
     }
@@ -66,7 +68,7 @@ class CameraSteps {
     fun assertCameraPhotoMode() {
         val service = KrakenBleService.instance ?: return
         if (KrakenBleService.state.value.isVideoMode) {
-            service.simulateButtonPress(KrakenBleService.BTN_FN_PRESS)
+            service.simulateButtonPress(BTN_FN_PRESS)
             Thread.sleep(800)
         }
     }

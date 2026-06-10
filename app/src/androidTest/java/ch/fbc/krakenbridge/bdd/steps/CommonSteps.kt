@@ -2,6 +2,9 @@ package ch.fbc.krakenbridge.bdd.steps
 
 import androidx.test.platform.app.InstrumentationRegistry
 import ch.fbc.krakenbridge.KrakenAccessibilityService
+import ch.fbc.krakenbridge.BTN_BACK_PRESS
+import ch.fbc.krakenbridge.BTN_FN_PRESS
+import ch.fbc.krakenbridge.BTN_SHUTTER_PRESS
 import ch.fbc.krakenbridge.KrakenBleService
 import io.cucumber.java.After
 import io.cucumber.java.Before
@@ -88,7 +91,7 @@ class CommonSteps {
         val service = KrakenBleService.instance ?: return
         if (!KrakenBleService.state.value.isVideoMode) {
             // Toggle into video mode
-            service.simulateButtonPress(KrakenBleService.BTN_FN_PRESS)
+            service.simulateButtonPress(BTN_FN_PRESS)
             Thread.sleep(800) // allow mode-switch gesture to dispatch
         }
         check(KrakenBleService.state.value.isVideoMode) { "Service failed to switch to video mode" }
@@ -98,7 +101,7 @@ class CommonSteps {
     fun assertInGalleryMode() {
         val service = KrakenBleService.instance ?: return
         if (!KrakenBleService.state.value.isGalleryMode) {
-            service.simulateButtonPress(KrakenBleService.BTN_BACK_PRESS)
+            service.simulateButtonPress(BTN_BACK_PRESS)
             Thread.sleep(1200)
         }
         check(KrakenBleService.state.value.isGalleryMode) { "Service failed to switch to gallery mode" }
@@ -120,7 +123,7 @@ class CommonSteps {
     fun assertRecordingInProgress() {
         val service = KrakenBleService.instance ?: return
         if (!KrakenBleService.state.value.isRecording) {
-            service.simulateButtonPress(KrakenBleService.BTN_SHUTTER_PRESS)
+            service.simulateButtonPress(BTN_SHUTTER_PRESS)
             Thread.sleep(500)
         }
         check(KrakenBleService.state.value.isRecording) { "Service failed to start recording" }

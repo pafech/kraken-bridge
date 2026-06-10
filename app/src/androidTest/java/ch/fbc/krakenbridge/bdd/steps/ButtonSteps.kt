@@ -1,5 +1,11 @@
 package ch.fbc.krakenbridge.bdd.steps
 
+import ch.fbc.krakenbridge.BTN_BACK_PRESS
+import ch.fbc.krakenbridge.BTN_FN_PRESS
+import ch.fbc.krakenbridge.BTN_MINUS_PRESS
+import ch.fbc.krakenbridge.BTN_OK_PRESS
+import ch.fbc.krakenbridge.BTN_PLUS_PRESS
+import ch.fbc.krakenbridge.BTN_SHUTTER_PRESS
 import ch.fbc.krakenbridge.KrakenBleService
 import io.cucumber.java.en.Then
 import io.cucumber.java.en.When
@@ -20,22 +26,22 @@ class ButtonSteps {
     // ── When – button presses ─────────────────────────────────────────────────
 
     @When("the shutter button is pressed")
-    fun pressShutter() = simulateAndWait(KrakenBleService.BTN_SHUTTER_PRESS, 800)
+    fun pressShutter() = simulateAndWait(BTN_SHUTTER_PRESS, 800)
 
     @When("the Fn button is pressed")
-    fun pressFn() = simulateAndWait(KrakenBleService.BTN_FN_PRESS, 800)
+    fun pressFn() = simulateAndWait(BTN_FN_PRESS, 800)
 
     @When("the Back button is pressed")
-    fun pressBack() = simulateAndWait(KrakenBleService.BTN_BACK_PRESS, 1200)
+    fun pressBack() = simulateAndWait(BTN_BACK_PRESS, 1200)
 
     @When("the Plus button is pressed")
-    fun pressPlus() = simulateAndWait(KrakenBleService.BTN_PLUS_PRESS, 500)
+    fun pressPlus() = simulateAndWait(BTN_PLUS_PRESS, 500)
 
     @When("the Minus button is pressed")
-    fun pressMinus() = simulateAndWait(KrakenBleService.BTN_MINUS_PRESS, 500)
+    fun pressMinus() = simulateAndWait(BTN_MINUS_PRESS, 500)
 
     @When("the OK button is pressed")
-    fun pressOk() = simulateAndWait(KrakenBleService.BTN_OK_PRESS, 2500)
+    fun pressOk() = simulateAndWait(BTN_OK_PRESS, 2500)
 
     // ── Then – BLE service state assertions ───────────────────────────────────
     // "the BLE service is in {photo,video,gallery,camera} mode" is owned by

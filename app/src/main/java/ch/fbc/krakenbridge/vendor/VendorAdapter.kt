@@ -2,7 +2,16 @@ package ch.fbc.krakenbridge.vendor
 
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import ch.fbc.krakenbridge.KrakenAccessibilityService
+
+/**
+ * Shared main-looper handler for the adapters' delayed retry scheduling
+ * (overflow-menu polls, thumbnail polls). One instance is enough — every
+ * adapter schedules onto the same looper anyway.
+ */
+internal val mainHandler = Handler(Looper.getMainLooper())
 
 /**
  * One adapter per camera/gallery vendor whose UI we automate via the
