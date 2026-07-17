@@ -143,17 +143,7 @@ object SamsungAdapter : VendorAdapter {
             }
         }
 
-        if (node != null) {
-            if (svc.clickNode(node)) {
-                Log.i(TAG, "Clicked trash via accessibility")
-                return true
-            }
-            svc.getNodeCenter(node)?.let { (x, y) ->
-                Log.i(TAG, "Node click failed; tapping trash at ($x, $y)")
-                svc.dispatchTap(x, y)
-                return true
-            }
-        }
+        if (node != null && svc.clickNodeOrTapCenter(node)) return true
 
         Log.w(TAG, "No trash node found; coordinate fallback")
         svc.dispatchTapAtRatio(TRASH_X, TRASH_Y)
@@ -276,14 +266,7 @@ object SamsungAdapter : VendorAdapter {
             if (node != null) Log.i(TAG, "Found confirm via android:id/button1")
         }
 
-        if (node != null) {
-            if (svc.clickNode(node)) return true
-            svc.getNodeCenter(node)?.let { (x, y) ->
-                Log.i(TAG, "Node click failed; tapping confirm at ($x, $y)")
-                svc.dispatchTap(x, y)
-                return true
-            }
-        }
+        if (node != null && svc.clickNodeOrTapCenter(node)) return true
 
         Log.w(TAG, "No confirm node found; coordinate fallback")
         svc.dispatchTapAtRatio(CONFIRM_X, CONFIRM_Y)

@@ -335,6 +335,22 @@ class KrakenAccessibilityService : AccessibilityService() {
     internal fun getNodeCenter(node: AccessibilityNodeInfo): Pair<Float, Float>? =
         nodes.center(node)
 
+    // Composes a node op with a gesture, so it can't live in either
+    // collaborator — the one non-shell in this section.
+    /**
+     * Click [node] via ACTION_CLICK, falling back to a physical tap at its
+     * center when the app ignores accessibility clicks. Returns false when
+     * neither works (no bounds), so callers can apply their own coordinate
+     * fallback.
+     */
+    internal fun clickNodeOrTapCenter(node: AccessibilityNodeInfo): Boolean {
+        if (clickNode(node)) return true
+        val (x, y) = getNodeCenter(node) ?: return false
+        Log.i(TAG, "Node click failed; tapping node center ($x, $y)")
+        dispatchTap(x, y)
+        return true
+    }
+
     fun dumpAccessibilityTree() = nodes.dumpTree()
 
     internal fun dispatchTap(x: Float, y: Float) = gestures.tap(x, y)

@@ -176,11 +176,7 @@ object StockAndroidAdapter : VendorAdapter {
 
         if (node == null) {
             Log.d(TAG, "Trying text-based search for trash button")
-            val trashTexts = listOf(
-                "Delete", "Move to bin", "Move to trash", "Bin", "Trash",
-                "Löschen", "Papierkorb", "Supprimer", "Eliminar"
-            )
-            for (text in trashTexts) {
+            for (text in DELETE_LABELS) {
                 node = svc.findNodeByText(text, exactMatch = false)
                 if (node != null) {
                     Log.i(TAG, "Found trash by text: $text")
@@ -242,18 +238,7 @@ object StockAndroidAdapter : VendorAdapter {
             if (node != null) Log.i(TAG, "Found trash button by region search")
         }
 
-        if (node != null) {
-            if (svc.clickNode(node)) {
-                Log.i(TAG, "Successfully clicked trash via accessibility")
-                return true
-            }
-            Log.w(TAG, "Node click failed, tapping at node center")
-            svc.getNodeCenter(node)?.let { (x, y) ->
-                Log.i(TAG, "Tapping trash at node center ($x, $y)")
-                svc.dispatchTap(x, y)
-                return true
-            }
-        }
+        if (node != null && svc.clickNodeOrTapCenter(node)) return true
 
         Log.w(TAG, "All accessibility strategies failed, using coordinate fallback")
         svc.dispatchTapAtRatio(TRASH_X, TRASH_Y)
@@ -278,12 +263,7 @@ object StockAndroidAdapter : VendorAdapter {
         if (node != null) {
             Log.i(TAG, "Found confirm button: text=${node.text}, desc=${node.contentDescription}, " +
                     "clickable=${node.isClickable}")
-            if (svc.clickNode(node)) return true
-            svc.getNodeCenter(node)?.let { (x, y) ->
-                Log.i(TAG, "Direct click failed, tapping confirm at ($x, $y)")
-                svc.dispatchTap(x, y)
-                return true
-            }
+            if (svc.clickNodeOrTapCenter(node)) return true
         }
 
         Log.w(TAG, "Could not find confirm button, using fallback coordinates")
