@@ -91,6 +91,13 @@ android {
         // not found". The -v26 qualifier is the documented and only working
         // location for adaptive-icon XMLs, so the check is wrong for our case.
         disable += "ObsoleteSdkInt"
+        // targetSdk deliberately stays on 36 until overlay/wake behaviour is
+        // retested on a real device (see the compileSdk comment above).
+        // Remove this disable when the targetSdk bump lands.
+        disable += "OldTargetApi"
+        // Lint is a CI gate: any new warning fails the build. Deliberate
+        // exceptions get a reasoned disable above — never a silent baseline.
+        warningsAsErrors = true
     }
 }
 
