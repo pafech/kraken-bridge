@@ -5,10 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.provider.Settings
 import android.util.Log
-import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import ch.fbc.krakenbridge.KrakenBleService.Companion.TAG
 import ch.fbc.krakenbridge.vendor.VendorRegistry
@@ -100,7 +98,7 @@ class GalleryController(
             return
         }
 
-        if (latest == null && hasPartialMediaAccess()) {
+        if (latest == null && hasPartialMediaAccess(context)) {
             Log.w(TAG, "Partial media access detected — MediaStore returned empty")
             updateStatus(ConnectionStatus.Ready, "Limited photo access — grant full access in app settings")
             openAppSettings()
@@ -124,25 +122,6 @@ class GalleryController(
         }
         return context.packageManager.resolveActivity(probe, PackageManager.MATCH_DEFAULT_ONLY)
             ?.activityInfo?.packageName
-    }
-
-    /**
-     * Detect Android 14+ partial photo access: permissions are technically "granted"
-     * but the user chose "Select photos" instead of "Allow all", so MediaStore
-     * returns only the hand-picked subset (often empty for recent captures).
-     */
-    private fun hasPartialMediaAccess(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
-        val hasImages = ContextCompat.checkSelfPermission(
-            context, android.Manifest.permission.READ_MEDIA_IMAGES
-        ) == PackageManager.PERMISSION_GRANTED
-        val hasUserSelected = ContextCompat.checkSelfPermission(
-            context, "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
-        ) == PackageManager.PERMISSION_GRANTED
-        // If READ_MEDIA_VISUAL_USER_SELECTED is granted but READ_MEDIA_IMAGES is not,
-        // the user picked "Select photos" — partial access.
-        // If both are granted, we have full access but MediaStore is genuinely empty.
-        return hasUserSelected && !hasImages
     }
 
     private fun openAppSettings() {

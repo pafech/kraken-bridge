@@ -179,28 +179,10 @@ class MainActivity : ComponentActivity() {
     // result. Marking pre-launch leaves a "marked but never asked" record
     // if the process dies between mark and launch — same false-positive
     // symptom as a backup restore of kraken_permission_log.
-    private val bluetoothPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        results.keys.forEach { permLog.markRequested(it) }
-        onPermissionResult()
-    }
-
-    private val locationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        results.keys.forEach { permLog.markRequested(it) }
-        onPermissionResult()
-    }
-
-    private val mediaPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        results.keys.forEach { permLog.markRequested(it) }
-        onPermissionResult()
-    }
-
-    private val notificationPermissionLauncher = registerForActivityResult(
+    // One launcher serves every runtime-permission request (Bluetooth,
+    // location, media, notifications) — the callback never looks at which
+    // feature asked, it just logs the request and refreshes all states.
+    private val runtimePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         results.keys.forEach { permLog.markRequested(it) }
@@ -577,11 +559,7 @@ class MainActivity : ComponentActivity() {
         media = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val hasImages = isGranted(Manifest.permission.READ_MEDIA_IMAGES)
             val hasVideo = isGranted(Manifest.permission.READ_MEDIA_VIDEO)
-            hasPartialMedia = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val hasUserSelected =
-                    isGranted("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")
-                hasUserSelected && !hasImages
-            } else false
+            hasPartialMedia = hasPartialMediaAccess(this)
             PermissionState(
                 granted = hasImages && hasVideo,
                 needsSettings = hasPartialMedia ||
@@ -639,7 +617,7 @@ class MainActivity : ComponentActivity() {
         }
         if (bluetooth.granted) return
         if (bluetooth.needsSettings) { openAppDetailsSettings(); return }
-        bluetoothPermissionLauncher.launch(
+        runtimePermissionLauncher.launch(
             arrayOf(
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT
@@ -650,7 +628,7 @@ class MainActivity : ComponentActivity() {
     private fun requestLocation() {
         if (location.granted) return
         if (location.needsSettings) { openAppDetailsSettings(); return }
-        locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+        runtimePermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
     }
 
     private fun requestNotifications() {
@@ -659,7 +637,7 @@ class MainActivity : ComponentActivity() {
         }
         if (notifications.granted) return
         if (notifications.needsSettings) { openAppNotificationSettings(); return }
-        notificationPermissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+        runtimePermissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
     }
 
     /**
@@ -823,9 +801,9 @@ class MainActivity : ComponentActivity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 permissions.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
             }
-            mediaPermissionLauncher.launch(permissions.toTypedArray())
+            runtimePermissionLauncher.launch(permissions.toTypedArray())
         } else {
-            mediaPermissionLauncher.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
+            runtimePermissionLauncher.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
         }
     }
 

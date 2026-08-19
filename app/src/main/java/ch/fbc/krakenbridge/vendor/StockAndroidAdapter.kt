@@ -93,12 +93,7 @@ object StockAndroidAdapter : VendorAdapter {
                 return
             }
 
-            if (!svc.clickNode(node)) {
-                svc.getNodeCenter(node)?.let { (x, y) ->
-                    Log.i(TAG, "Direct click failed, tapping $targetMode toggle at ($x, $y)")
-                    svc.dispatchTap(x, y)
-                }
-            }
+            svc.clickNodeOrTapCenter(node)
             return
         }
 
@@ -156,32 +151,14 @@ object StockAndroidAdapter : VendorAdapter {
     override fun clickTrash(svc: KrakenAccessibilityService): Boolean {
         Log.i(TAG, "Looking for trash button (Photos version code: ${getGooglePhotosVersionCode(svc)})")
 
-        var node: AccessibilityNodeInfo? = null
-
-        val trashDescriptions = listOf(
-            "Delete", "Move to Bin", "Move to bin", "Move to Trash", "Move to trash",
-            "Bin", "Trash",
-            "Löschen", "Papierkorb", "In Papierkorb",
-            "In Papierkorb verschieben",
-            "Supprimer", "Corbeille",
-            "Eliminar", "Papelera"
-        )
-        for (desc in trashDescriptions) {
-            node = svc.findNodeByContentDescription(desc, exactMatch = false)
-            if (node != null) {
-                Log.i(TAG, "Found trash by content description: $desc")
-                break
-            }
+        var node = findFirstNode(DELETE_LABELS, TAG, "trash by content description") {
+            svc.findNodeByContentDescription(it, exactMatch = false)
         }
 
         if (node == null) {
             Log.d(TAG, "Trying text-based search for trash button")
-            for (text in DELETE_LABELS) {
-                node = svc.findNodeByText(text, exactMatch = false)
-                if (node != null) {
-                    Log.i(TAG, "Found trash by text: $text")
-                    break
-                }
+            node = findFirstNode(DELETE_LABELS, TAG, "trash by text") {
+                svc.findNodeByText(it, exactMatch = false)
             }
         }
 
@@ -217,12 +194,8 @@ object StockAndroidAdapter : VendorAdapter {
                 "$PKG_GOOGLE_PHOTOS:id/trash_button",
                 "$PKG_GOOGLE_PHOTOS:id/delete_button"
             )
-            for (resourceId in trashResourceIds) {
-                node = svc.findNodeByResourceId(resourceId)
-                if (node != null) {
-                    Log.i(TAG, "Found trash by resource ID: $resourceId")
-                    break
-                }
+            node = findFirstNode(trashResourceIds, TAG, "trash by resource ID") {
+                svc.findNodeByResourceId(it)
             }
         }
 
@@ -238,11 +211,7 @@ object StockAndroidAdapter : VendorAdapter {
             if (node != null) Log.i(TAG, "Found trash button by region search")
         }
 
-        if (node != null && svc.clickNodeOrTapCenter(node)) return true
-
-        Log.w(TAG, "All accessibility strategies failed, using coordinate fallback")
-        svc.dispatchTapAtRatio(TRASH_X, TRASH_Y)
-        return true
+        return clickOrTapFallback(svc, node, TRASH_X, TRASH_Y, TAG, "trash")
     }
 
     override fun clickConfirmDelete(svc: KrakenAccessibilityService): Boolean {
@@ -263,18 +232,9 @@ object StockAndroidAdapter : VendorAdapter {
         if (node != null) {
             Log.i(TAG, "Found confirm button: text=${node.text}, desc=${node.contentDescription}, " +
                     "clickable=${node.isClickable}")
-            if (svc.clickNodeOrTapCenter(node)) return true
         }
-
-        Log.w(TAG, "Could not find confirm button, using fallback coordinates")
-        svc.dispatchTapAtRatio(CONFIRM_X, CONFIRM_Y)
-        return true
+        return clickOrTapFallback(svc, node, CONFIRM_X, CONFIRM_Y, TAG, "confirm")
     }
-
-    private val DELETE_LABELS = listOf(
-        "Delete", "Move to bin", "Move to trash", "Bin", "Trash",
-        "Löschen", "Papierkorb", "Supprimer", "Eliminar"
-    )
 
     /**
      * Open the "More options" / overflow menu and schedule the delete-item
@@ -299,9 +259,7 @@ object StockAndroidAdapter : VendorAdapter {
         }
 
         Log.i(TAG, "Found overflow menu – opening, will search for delete option async")
-        if (!svc.clickNode(overflowNode)) {
-            svc.getNodeCenter(overflowNode)?.let { (x, y) -> svc.dispatchTap(x, y) }
-        }
+        svc.clickNodeOrTapCenter(overflowNode)
 
         scheduleDeleteSearch(svc, retriesLeft = 5)
         return true
@@ -309,16 +267,13 @@ object StockAndroidAdapter : VendorAdapter {
 
     private fun scheduleDeleteSearch(svc: KrakenAccessibilityService, retriesLeft: Int) {
         mainHandler.postDelayed({
-            for (desc in DELETE_LABELS) {
-                val node = svc.findNodeByText(desc, exactMatch = false)
-                    ?: svc.findNodeByContentDescription(desc, exactMatch = false)
-                if (node != null) {
-                    Log.i(TAG, "Found '$desc' inside overflow menu, tapping")
-                    if (!svc.clickNode(node)) {
-                        svc.getNodeCenter(node)?.let { (x, y) -> svc.dispatchTap(x, y) }
-                    }
-                    return@postDelayed
-                }
+            val node = findFirstNode(DELETE_LABELS, TAG, "delete item in overflow menu") {
+                svc.findNodeByText(it, exactMatch = false)
+                    ?: svc.findNodeByContentDescription(it, exactMatch = false)
+            }
+            if (node != null) {
+                svc.clickNodeOrTapCenter(node)
+                return@postDelayed
             }
             if (retriesLeft > 0) {
                 scheduleDeleteSearch(svc, retriesLeft - 1)

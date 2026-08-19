@@ -7,7 +7,6 @@ import android.content.Intent
 import android.graphics.Rect
 import android.net.Uri
 import android.util.Log
-import android.view.accessibility.AccessibilityNodeInfo
 import ch.fbc.krakenbridge.KrakenAccessibilityService
 
 /**
@@ -129,25 +128,15 @@ object SamsungAdapter : VendorAdapter {
     override fun clickTrash(svc: KrakenAccessibilityService): Boolean {
         Log.i(TAG, "Looking for Samsung Gallery delete button")
 
-        var node: AccessibilityNodeInfo? = svc.findNodeByContentDescription("Delete button", exactMatch = true)
-            ?: svc.findNodeByContentDescription("Delete", exactMatch = true)
-
-        if (node == null) {
-            val localised = listOf("Löschen", "Supprimer", "Eliminar")
-            for (desc in localised) {
-                node = svc.findNodeByContentDescription(desc, exactMatch = true)
-                if (node != null) {
-                    Log.i(TAG, "Found trash by localised desc: $desc")
-                    break
-                }
+        // Samsung's descs are exact strings from the One UI dumps, so this
+        // list is matched with exactMatch = true — the long DELETE_LABELS
+        // entries simply never match here.
+        val node = svc.findNodeByContentDescription("Delete button", exactMatch = true)
+            ?: findFirstNode(DELETE_LABELS, TAG, "trash by exact desc") {
+                svc.findNodeByContentDescription(it, exactMatch = true)
             }
-        }
 
-        if (node != null && svc.clickNodeOrTapCenter(node)) return true
-
-        Log.w(TAG, "No trash node found; coordinate fallback")
-        svc.dispatchTapAtRatio(TRASH_X, TRASH_Y)
-        return true
+        return clickOrTapFallback(svc, node, TRASH_X, TRASH_Y, TAG, "trash")
     }
 
     /**
@@ -252,13 +241,8 @@ object SamsungAdapter : VendorAdapter {
             "Déplacer vers la corbeille",
             "Mover a la papelera"
         )
-        var node: AccessibilityNodeInfo? = null
-        for (t in texts) {
-            node = svc.findNodeByText(t, exactMatch = false)
-            if (node != null) {
-                Log.i(TAG, "Found confirm by text: $t")
-                break
-            }
+        var node = findFirstNode(texts, TAG, "confirm by text") {
+            svc.findNodeByText(it, exactMatch = false)
         }
 
         if (node == null) {
@@ -266,10 +250,6 @@ object SamsungAdapter : VendorAdapter {
             if (node != null) Log.i(TAG, "Found confirm via android:id/button1")
         }
 
-        if (node != null && svc.clickNodeOrTapCenter(node)) return true
-
-        Log.w(TAG, "No confirm node found; coordinate fallback")
-        svc.dispatchTapAtRatio(CONFIRM_X, CONFIRM_Y)
-        return true
+        return clickOrTapFallback(svc, node, CONFIRM_X, CONFIRM_Y, TAG, "confirm")
     }
 }

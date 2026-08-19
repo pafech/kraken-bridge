@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
+import android.view.accessibility.AccessibilityNodeInfo
 import ch.fbc.krakenbridge.KrakenAccessibilityService
 
 /**
@@ -12,6 +14,56 @@ import ch.fbc.krakenbridge.KrakenAccessibilityService
  * adapter schedules onto the same looper anyway.
  */
 internal val mainHandler = Handler(Looper.getMainLooper())
+
+/**
+ * Delete-affordance labels shared by the adapters' trash lookups. With
+ * `exactMatch = false` the finders match case-insensitive substrings, so
+ * short stems ("Papierkorb", "Corbeille") also cover the long variants
+ * ("In Papierkorb verschieben", "Déplacer vers la corbeille").
+ */
+internal val DELETE_LABELS = listOf(
+    "Delete", "Move to bin", "Move to trash", "Bin", "Trash",
+    "Löschen", "Papierkorb", "Supprimer", "Corbeille", "Eliminar", "Papelera"
+)
+
+/**
+ * Try [labels] in order against [find] until one yields a node. Logs the
+ * winning label so field logs show which heuristic matched.
+ */
+internal inline fun findFirstNode(
+    labels: List<String>,
+    tag: String,
+    what: String,
+    find: (String) -> AccessibilityNodeInfo?
+): AccessibilityNodeInfo? {
+    for (label in labels) {
+        val node = find(label)
+        if (node != null) {
+            Log.i(tag, "Found $what: \"$label\"")
+            return node
+        }
+    }
+    return null
+}
+
+/**
+ * Shared tail of the delete flows: click [node] (with tap-center fallback)
+ * when present, otherwise dispatch the vendor's coordinate fallback tap.
+ * Always returns true — a dispatched fallback counts as handled.
+ */
+internal fun clickOrTapFallback(
+    svc: KrakenAccessibilityService,
+    node: AccessibilityNodeInfo?,
+    fallbackX: Float,
+    fallbackY: Float,
+    tag: String,
+    what: String
+): Boolean {
+    if (node != null && svc.clickNodeOrTapCenter(node)) return true
+    Log.w(tag, "No $what node clickable; coordinate fallback")
+    svc.dispatchTapAtRatio(fallbackX, fallbackY)
+    return true
+}
 
 /**
  * One adapter per camera/gallery vendor whose UI we automate via the
