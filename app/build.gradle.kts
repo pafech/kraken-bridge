@@ -53,6 +53,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             // No ndk.debugSymbolLevel: this project has no own NDK code. The only
             // .so in the AAB comes from androidx.graphics:graphics-path (transitive
             // Compose dep) and ships stripped, so AGP cannot extract symbols.
