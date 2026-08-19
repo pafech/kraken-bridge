@@ -23,7 +23,6 @@ private data class WaveLayer(
     val baseYFraction: Float,
     val amplitude: Float,
     val wavelength: Float,
-    val periodMs: Int,
     val color: Color,
     val reversed: Boolean
 )
@@ -47,7 +46,6 @@ fun WaveBackground(modifier: Modifier = Modifier) {
             baseYFraction = 0.72f,
             amplitude = 28f,
             wavelength = 520f,
-            periodMs = 12_000,
             color = OceanAquaLight.copy(alpha = 0.32f),
             reversed = false
         ),
@@ -56,7 +54,6 @@ fun WaveBackground(modifier: Modifier = Modifier) {
             baseYFraction = 0.80f,
             amplitude = 22f,
             wavelength = 380f,
-            periodMs = 9_000,
             color = OceanAqua.copy(alpha = 0.55f),
             reversed = true
         ),
@@ -66,7 +63,6 @@ fun WaveBackground(modifier: Modifier = Modifier) {
             baseYFraction = 0.88f,
             amplitude = 18f,
             wavelength = 260f,
-            periodMs = 7_000,
             color = OceanWaveDeep.copy(alpha = 0.92f),
             reversed = false
         )

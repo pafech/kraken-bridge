@@ -54,7 +54,6 @@ class KrakenBleService : Service() {
         // Actions for binding
         const val ACTION_CONNECT = "ch.fbc.krakenbridge.CONNECT"
         const val ACTION_DISCONNECT = "ch.fbc.krakenbridge.DISCONNECT"
-        const val ACTION_STATUS = "ch.fbc.krakenbridge.STATUS"
 
         /**
          * Single source of truth for the session state. Companion-level so

@@ -42,16 +42,9 @@ class KrakenAccessibilityService : AccessibilityService() {
         const val ACTION_INJECT_KEY = "ch.fbc.krakenbridge.INJECT_KEY"
         const val EXTRA_KEY_CODE = "keyCode"
 
-        // Action to check if service is running
-        const val ACTION_CHECK_SERVICE = "ch.fbc.krakenbridge.CHECK_A11Y_SERVICE"
-        const val BROADCAST_SERVICE_STATUS = "ch.fbc.krakenbridge.A11Y_SERVICE_STATUS"
-        const val EXTRA_IS_RUNNING = "isRunning"
-
         @Volatile
         var instance: KrakenAccessibilityService? = null
             private set
-
-        fun isServiceRunning(): Boolean = instance != null
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -74,15 +67,10 @@ class KrakenAccessibilityService : AccessibilityService() {
 
     private val keyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                ACTION_INJECT_KEY -> {
-                    val keyCode = intent.getIntExtra(EXTRA_KEY_CODE, -1)
-                    if (keyCode != -1) {
-                        handleKeyInjection(keyCode)
-                    }
-                }
-                ACTION_CHECK_SERVICE -> {
-                    broadcastServiceStatus()
+            if (intent?.action == ACTION_INJECT_KEY) {
+                val keyCode = intent.getIntExtra(EXTRA_KEY_CODE, -1)
+                if (keyCode != -1) {
+                    handleKeyInjection(keyCode)
                 }
             }
         }
@@ -113,20 +101,16 @@ class KrakenAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
 
-        // Register receiver for key injection requests. Both actions are
+        // Register receiver for key injection requests. The action is
         // package-internal (sender uses setPackage(packageName)), so the
         // receiver must be NOT_EXPORTED. ContextCompat handles the API 33+
         // flag requirement and the no-op behaviour on older releases.
-        val filter = IntentFilter().apply {
-            addAction(ACTION_INJECT_KEY)
-            addAction(ACTION_CHECK_SERVICE)
-        }
         ContextCompat.registerReceiver(
-            this, keyReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED
+            this, keyReceiver, IntentFilter(ACTION_INJECT_KEY),
+            ContextCompat.RECEIVER_NOT_EXPORTED
         )
 
         Log.i(TAG, "Accessibility service connected and ready")
-        broadcastServiceStatus()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -290,14 +274,6 @@ class KrakenAccessibilityService : AccessibilityService() {
      */
     fun dispatchModeSwipeGesture(toVideo: Boolean) {
         currentAdapter().modeSwitch(this, toVideo)
-    }
-
-    private fun broadcastServiceStatus() {
-        val intent = Intent(BROADCAST_SERVICE_STATUS).apply {
-            putExtra(EXTRA_IS_RUNNING, true)
-            setPackage(packageName)
-        }
-        sendBroadcast(intent)
     }
 
     // ── Delegation shells ────────────────────────────────────────────────────
