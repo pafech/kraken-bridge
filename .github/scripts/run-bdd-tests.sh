@@ -3,6 +3,21 @@
 # Called from the CI workflow after the emulator has booted.
 set -euo pipefail
 
+# Pin the screen on BEFORE the Gradle build. The screen-off timer starts at
+# emulator boot and nothing else resets it; once the panel sleeps, the
+# foreground activity stops and its accessibility tree empties, so every
+# UiAutomator By.text lookup fails — the UI-driven scenarios go red while
+# service-reflection scenarios still pass (seen as the intermittent
+# disclosure-gate failures in runs 27012024159 / 27015010287). Pinning
+# after the build left a hole: a cold build takes minutes (2.5 min in run
+# 35915376995, which lost the three disclosure-gate scenarios with
+# foreground=android, against 35 s in the green run 35916724650), and the
+# wake after the build did not restore UiAutomator's window state in time.
+# stayon=true keeps the screen awake while powered (an emulator always is).
+adb shell svc power stayon true
+adb shell input keyevent KEYCODE_WAKEUP
+adb shell wm dismiss-keyguard
+
 ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
 
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -14,15 +29,7 @@ adb shell settings put secure enabled_accessibility_services \
 adb shell settings put secure accessibility_enabled 1
 sleep 2
 
-# Pin the screen on for the whole suite. The screen-off timer starts at
-# emulator boot and nothing else resets it; once the panel sleeps, the
-# foreground activity stops and its accessibility tree empties, so every
-# UiAutomator By.text lookup fails — the UI-driven scenarios go red while
-# service-reflection scenarios still pass (seen as the intermittent
-# disclosure-gate failures in runs 27012024159 / 27015010287).
-# stayon=true keeps the screen awake while powered (an emulator always is);
-# wakeup + dismiss-keyguard recover if it already slept during the build.
-adb shell svc power stayon true
+# Belt and braces: wake again in case the panel slept anyway.
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
 # Start the suite with an empty log so the logcat artifact below covers
