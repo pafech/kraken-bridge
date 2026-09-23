@@ -95,6 +95,10 @@ android {
         // retested on a real device (see the compileSdk comment above).
         // Remove this disable when the targetSdk bump lands.
         disable += "OldTargetApi"
+        // GradleDependency flags every newer upstream release, so main turns
+        // red on days when nothing here changed. Dependabot owns dependency
+        // freshness (weekly grouped PRs); lint does not need to police it too.
+        disable += "GradleDependency"
         // Lint is a CI gate: any new warning fails the build. Deliberate
         // exceptions get a reasoned disable above — never a silent baseline.
         warningsAsErrors = true
