@@ -111,7 +111,7 @@ dependencies {
     // Core: ContextCompat, toUri, SharedPreferences.edit (used app-wide).
     // core-ktx became an empty artifact in 1.19.0 (ktx APIs merged into core),
     // so we depend on core directly.
-    implementation("androidx.core:core:1.19.0")
+    implementation("androidx.core:core:1.19.1")
     // ComponentActivity + setContent for the Compose host
     implementation("androidx.activity:activity-compose:1.13.0")
 
