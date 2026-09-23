@@ -76,6 +76,8 @@ jobs:
   # counter is per-workflow, NOT shared with release.yml. release.yml adds
   # a +100 offset to keep tagged releases above the CI range (CI artifacts
   # are for sideload/QA, releases ship to Play Store).
+  # Dependabot PRs are the one exception: they run without repository
+  # secrets, so their release build is unsigned and uploads no artifact.
   build:
     name: Build signed release APK + AAB
     runs-on: ubuntu-latest
@@ -103,13 +105,18 @@ jobs:
           echo "VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
 
       - name: Decode keystore
+        # Dependabot PRs run without repository secrets. Without a keystore
+        # the release build stays unsigned (build.gradle.kts attaches the
+        # signing config only when KEYSTORE_PATH is set), which still proves
+        # the R8 build. The push to main after the merge signs as usual.
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          echo "KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
       - name: Build signed release APK + AAB
         run: ./gradlew assembleRelease bundleRelease --no-daemon
         env:
-          KEYSTORE_PATH: ${{ runner.temp }}/release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -121,6 +128,8 @@ jobs:
         run: rm -f "$RUNNER_TEMP/release.jks"
 
       - name: Upload release APK
+        # An unsigned build (no keystore) is not shippable, so it is not offered.
+        if: env.KEYSTORE_PATH != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kraken-bridge-${{ env.VERSION_NAME }}-apk
@@ -128,6 +137,7 @@ jobs:
           retention-days: 3
 
       - name: Upload release AAB
+        if: env.KEYSTORE_PATH != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kraken-bridge-${{ env.VERSION_NAME }}-playstore-aab
