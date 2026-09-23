@@ -81,6 +81,10 @@ jobs:
   build:
     name: Build signed release APK + AAB
     runs-on: ubuntu-latest
+    env:
+      # A step-level `if` cannot read the secrets context, so the presence
+      # of the keystore secret is mirrored here.
+      HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
 
     steps:
       - name: Checkout
@@ -109,7 +113,7 @@ jobs:
         # the release build stays unsigned (build.gradle.kts attaches the
         # signing config only when KEYSTORE_PATH is set), which still proves
         # the R8 build. The push to main after the merge signs as usual.
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: env.HAS_KEYSTORE == 'true'
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/release.jks"
           echo "KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
