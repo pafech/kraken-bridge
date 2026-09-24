@@ -1,12 +1,14 @@
 name: CI
 
-# Triggers on every branch push and on PRs targeting main. Tag pushes go to
-# release.yml (which produces the canonical Play Store build); this CI workflow
-# produces a release-capable signed APK + AAB on every commit so any green
-# build can be promoted to the Play Store without an extra rebuild.
+# Triggers on pushes to main and on PRs targeting main. A feature branch gets
+# its CI run through the PR; running it on the push as well built every PR
+# twice. Tag pushes go to release.yml (which produces the canonical Play Store
+# build); this CI workflow produces a release-capable signed APK + AAB on every
+# main commit so any green build can be promoted to the Play Store without an
+# extra rebuild.
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
     branches: ["main"]
 
