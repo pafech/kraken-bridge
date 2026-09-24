@@ -124,6 +124,9 @@ class BleConnectionManager(
 
         override fun onScanFailed(errorCode: Int) {
             Log.e(TAG, "Scan failed with error: $errorCode")
+            // The scanner is not running — clear the flag, or every later
+            // startScan() returns early until the 30 s timeout fires.
+            scanning = false
             listener.onStatus(ConnectionStatus.Error, "Scan failed: $errorCode")
         }
     }
@@ -149,21 +152,7 @@ class BleConnectionManager(
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.i(TAG, "Disconnected from Kraken (status=$status, userDisconnect=$isUserDisconnect)")
-                    handler.removeCallbacks(serviceDiscoveryStartRunnable)
-                    handler.removeCallbacks(serviceDiscoveryTimeoutRunnable)
-                    stopConnectionMonitoring()
-                    listener.onDisconnected()
-                    bluetoothGatt?.close()
-                    bluetoothGatt = null
-
-                    if (isUserDisconnect) {
-                        // User requested disconnect
-                        listener.onStatus(ConnectionStatus.Disconnected, "Disconnected")
-                    } else {
-                        // Unexpected disconnect - try to reconnect
-                        listener.onStatus(ConnectionStatus.Reconnecting, "Connection lost - reconnecting...")
-                        attemptReconnect()
-                    }
+                    onLinkLost(gatt)
                 }
             }
         }
@@ -222,14 +211,42 @@ class BleConnectionManager(
                 Log.d(TAG, "Connection healthy, RSSI: $rssi dBm")
             } else {
                 Log.w(TAG, "RSSI read failed (status=$status) — treating as connection loss")
-                stopConnectionMonitoring()
-                gatt.close()
-                bluetoothGatt = null
-                if (!isUserDisconnect) {
-                    listener.onStatus(ConnectionStatus.Reconnecting, "Connection lost - reconnecting...")
-                    attemptReconnect()
-                }
+                onLinkLost(gatt)
             }
+        }
+    }
+
+    /**
+     * Single teardown for a lost link, shared by the DISCONNECTED callback and
+     * a failed RSSI read. The RSSI path closes the GATT itself, and a closed
+     * GATT never delivers DISCONNECTED — so this path must do the complete
+     * teardown, including [Listener.onDisconnected], or the connection wake
+     * lock is never released for this link.
+     */
+    private fun onLinkLost(gatt: BluetoothGatt) {
+        val current = bluetoothGatt
+        if (current != null && current !== gatt) {
+            // Late callback from a GATT we no longer own: close it, but leave
+            // the current link, its monitoring and the wake lock alone.
+            Log.w(TAG, "Ignoring link loss from a stale GATT")
+            gatt.close()
+            return
+        }
+
+        handler.removeCallbacks(serviceDiscoveryStartRunnable)
+        handler.removeCallbacks(serviceDiscoveryTimeoutRunnable)
+        stopConnectionMonitoring()
+        listener.onDisconnected()
+        gatt.close()
+        bluetoothGatt = null
+
+        if (isUserDisconnect) {
+            // User requested disconnect
+            listener.onStatus(ConnectionStatus.Disconnected, "Disconnected")
+        } else {
+            // Unexpected disconnect - try to reconnect
+            listener.onStatus(ConnectionStatus.Reconnecting, "Connection lost - reconnecting...")
+            attemptReconnect()
         }
     }
 

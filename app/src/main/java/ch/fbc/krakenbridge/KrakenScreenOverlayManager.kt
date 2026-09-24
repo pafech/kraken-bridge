@@ -62,9 +62,9 @@ class KrakenScreenOverlayManager(private val context: Context) {
     private val brightBrightness: Float = BRIGHT_BRIGHTNESS
 
     // Reflects the visible brightness state. Mutated only on the main
-    // thread inside dim() / restoreBrightnessOnMain(); read from any
-    // thread by [consumeWakeIfDim] so the BLE service can decide whether
-    // to absorb the originating button event.
+    // thread inside dim() / restoreBrightnessOnMain() / stopOnMain(); read
+    // from any thread by [consumeWakeIfDim] so the BLE service can decide
+    // whether to absorb the originating button event.
     @Volatile
     private var isDim: Boolean = false
 
@@ -190,6 +190,9 @@ class KrakenScreenOverlayManager(private val context: Context) {
         }
         view = null
         layoutParams = null
+        // A restart attaches a bright view; a stale true here would absorb
+        // every button press as a wake-tap until the next dim cycle.
+        isDim = false
         Log.i(TAG, "Overlay detached")
     }
 
