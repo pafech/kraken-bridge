@@ -1008,7 +1008,7 @@ class MainActivity : ComponentActivity() {
 
     private fun toggleAccessibility() {
         if (accessibilityEnabled) {
-            KrakenAccessibilityService.instance?.disableSelf()
+            KrakenAccessibilityService.disableIfConnected()
             accessibilityEnabled = false
         } else {
             requestAccessibility()

@@ -43,9 +43,28 @@ class KrakenAccessibilityService : AccessibilityService() {
         const val EXTRA_KEY_CODE = "keyCode"
 
         @Volatile
-        var instance: KrakenAccessibilityService? = null
-            private set
+        private var connected: KrakenAccessibilityService? = null
+
+        /**
+         * The connected service, but only after the user gave the in-app
+         * prominent-disclosure consent (Google Play User Data Policy). A user
+         * can enable the service in Android Settings without ever seeing the
+         * disclosure; until they agree in the app, every caller sees null and
+         * the service acts on nothing. It stays enabled rather than calling
+         * disableSelf(), so agreeing later takes effect at once.
+         */
+        val instance: KrakenAccessibilityService?
+            get() = connected?.takeIf { it.hasDisclosureConsent() }
+
+        /** Turn the service off from the app's Accessibility row. */
+        fun disableIfConnected() {
+            connected?.disableSelf()
+        }
     }
+
+    private val uiHints by lazy { UiHints(this) }
+
+    private fun hasDisclosureConsent(): Boolean = uiHints.a11yDisclosureAccepted
 
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var nodes: AccessibilityNodeFinder
@@ -80,7 +99,6 @@ class KrakenAccessibilityService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
-        instance = this
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         updateScreenDimensions()
         nodes = AccessibilityNodeFinder(
@@ -94,12 +112,15 @@ class KrakenAccessibilityService : AccessibilityService() {
             screenWidth = { screenWidth },
             screenHeight = { screenHeight }
         )
+        // Published last: a caller on the BLE Binder thread must never see
+        // the service before its collaborators exist.
+        connected = this
         Log.i(TAG, "Accessibility service v${BuildConfig.VERSION_NAME} created, screen: ${screenWidth}x${screenHeight}")
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        instance = this
+        connected = this
 
         // Register receiver for key injection requests. The action is
         // package-internal (sender uses setPackage(packageName)), so the
@@ -120,7 +141,9 @@ class KrakenAccessibilityService : AccessibilityService() {
         // can come back to full brightness — without this the diver gets
         // stuck on a near-black screen the moment the idle dimmer kicked in
         // and they tried to interact via touch instead of housing buttons.
-        if (event?.eventType == AccessibilityEvent.TYPE_TOUCH_INTERACTION_START) {
+        if (event?.eventType == AccessibilityEvent.TYPE_TOUCH_INTERACTION_START &&
+            hasDisclosureConsent()
+        ) {
             KrakenBleService.instance?.notifyUserActivity()
         }
     }
@@ -131,7 +154,7 @@ class KrakenAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        instance = null
+        connected = null
         try {
             unregisterReceiver(keyReceiver)
         } catch (e: IllegalArgumentException) {

@@ -38,6 +38,7 @@ screen** so both options are visible without scrolling, and the
 | **No auto-dismiss / expiry** | Neither surface uses a timer | both |
 | **Graceful degradation** on decline (no coercive consent wall) | Declining the gate does **not** close the app; it stays usable with the service off, and the disclosure re-appears next launch / when the user tries to enable the service | `MainActivity` (`a11yDisclosureDismissedThisSession`) |
 | Consent recorded only on affirmative action | `a11yDisclosureAccepted` persisted on "I agree" in **both** surfaces | `MainActivity`, `Features.kt` (`UiHints`) |
+| Service **acts only after consent**, however it was enabled | If the service is enabled directly in Android Settings without in-app consent, `KrakenAccessibilityService.instance` stays null and touch events are not forwarded, so the service does nothing. It stays enabled (no `disableSelf()`), so agreeing in the app takes effect at once | `KrakenAccessibilityService.kt` (`instance`, `hasDisclosureConsent`) |
 
 Behaviour is locked by BDD: `app/src/androidTest/assets/features/accessibility_disclosure.feature`.
 
@@ -63,10 +64,3 @@ in order:
 Upload the video link in Play Console → App content → the AccessibilityService
 declaration, and submit with an incremented version code (CI sets the version
 code from the run number automatically).
-
-## Known follow-up (not required for approval)
-
-`KrakenAccessibilityService` does not currently check `a11yDisclosureAccepted`
-before acting. A user could enable the service directly from Android Settings
-after declining in-app, and it would still act. This is defense-in-depth, not a
-review blocker, and is tracked for a separate change.
