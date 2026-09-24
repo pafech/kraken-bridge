@@ -67,8 +67,8 @@ class PermissionRequestLog(context: Context) {
 /**
  * One-time UI hints that should not repeat on every app launch. Currently:
  * `mainPageOpened` — flips true the first time the user reaches the Main
- * page so the Settings → Main edge handle stops glowing as a CTA. Backed
- * up so a returning user on a new device doesn't see the glow again.
+ * page so the Settings page stops showing its "Swipe to main screen" pill.
+ * Backed up so a returning user on a new device doesn't see it again.
  *
  * `a11yDisclosureAccepted` — prominent-disclosure consent for the
  * AccessibilityService per Google Play User Data Policy. Persisted because

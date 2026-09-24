@@ -72,9 +72,9 @@ internal fun clickOrTapFallback(
  * adapter that claims the foreground package — so vendor code paths
  * live in dedicated files, never interleaved.
  *
- * Vendor-neutral motions (gallery swipe, focus tap) stay in the
- * service itself. They are pure coordinate maths and do not depend
- * on which app is foreground.
+ * Vendor-neutral motions (gallery swipe, focus tap) live in
+ * [ch.fbc.krakenbridge.GestureDispatcher]. They are pure coordinate
+ * maths and do not depend on which app is foreground.
  */
 interface VendorAdapter {
 

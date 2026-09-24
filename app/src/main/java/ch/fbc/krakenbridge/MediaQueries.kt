@@ -12,7 +12,7 @@ import android.util.Log
  * The MIME type is required so ACTION_VIEW resolves to a gallery viewer
  * that can render the URI directly in single-item view.
  *
- * Top-level pure function (resolver in, result out) so [KrakenBleService]
+ * Top-level pure function (resolver in, result out) so [GalleryController]
  * and BDD step definitions share one implementation.
  */
 internal fun queryLatestMedia(contentResolver: ContentResolver): Pair<Uri, String>? {

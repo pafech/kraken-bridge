@@ -35,12 +35,14 @@ import android.view.WindowManager
  *     power: BRIGHTNESS_OVERRIDE_NONE (-1) follows the user's preferred
  *     brightness; 0f drops the backlight to its hardware minimum (on OLED
  *     this is effectively black at near-zero power).
- *   - [onUserActivity] should be called on every BLE button event. It
- *     restores brightness immediately and resets the idle timer.
+ *   - Housing buttons go through [consumeWakeIfDim]; touches and system
+ *     user-presence broadcasts call [onUserActivity]. Both restore
+ *     brightness immediately and reset the idle timer.
  *
  * Lifecycle:
- *   Owned by [KrakenBleService]. Started when a connection is established,
- *   stopped on userDisconnect / onTaskRemoved / onDestroy. Safe to call
+ *   Owned by [KrakenBleService]. Started with the session (ACTION_CONNECT
+ *   or the START_STICKY restart) when Dive Mode is on, stopped on
+ *   userDisconnect / onTaskRemoved / onDestroy. Safe to call
  *   start / stop repeatedly.
  *
  * Permission:
@@ -72,7 +74,7 @@ class KrakenScreenOverlayManager(private val context: Context) {
      * When true the idle dimmer is suspended and the overlay stays at full
      * brightness no matter how long since the last user activity. Used by
      * the BLE service while a video recording is in progress — divers
-     * routinely shoot longer than the 30 s idle window and need to keep an
+     * routinely shoot longer than the 45 s idle window and need to keep an
      * eye on framing.
      */
     private var keepBright: Boolean = false

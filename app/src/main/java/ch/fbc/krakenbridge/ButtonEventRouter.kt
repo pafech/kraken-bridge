@@ -7,10 +7,10 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * The single entry point for housing button events (real BLE notifications
- * and the BDD `simulateButtonPress` seam): deduplicates double-fired
- * callbacks, absorbs the wake-tap on a dimmed overlay, wakes the screen,
- * and dispatches to the camera or gallery controller depending on the
- * session mode. Runs on the BLE Binder thread.
+ * and the BDD `simulateButtonPress` seam): drops repeated notifications,
+ * absorbs the wake-tap on a dimmed overlay, wakes the screen, and
+ * dispatches to the camera or gallery controller depending on the session
+ * mode. Runs on the BLE Binder thread.
  */
 class ButtonEventRouter(
     private val state: StateFlow<KrakenServiceState>,
@@ -21,7 +21,7 @@ class ButtonEventRouter(
     private val galleryController: GalleryController
 ) {
 
-    // Deduplication for button events (both legacy and new BLE callbacks may fire)
+    // Guard against a repeated notification of the same code (see ButtonDebouncer)
     private val debouncer = ButtonDebouncer(DEBOUNCE_MS) { System.currentTimeMillis() }
 
     fun route(code: Int) {
@@ -75,7 +75,7 @@ class ButtonEventRouter(
     fun resetDebounce() = debouncer.reset()
 
     companion object {
-        // Same-event window for the duplicate BLE callbacks (legacy + new)
+        // Window in which a repeat of the same code counts as a duplicate
         private const val DEBOUNCE_MS = 100L
 
         // Buttons whose handler injects a tap or key event into the camera's
