@@ -154,4 +154,8 @@ object VendorRegistry {
         val pkg = packageName ?: return StockAndroidAdapter
         return adapters.firstOrNull { it.handlesPackage(pkg) } ?: StockAndroidAdapter
     }
+
+    /** The first of [packageNames] that an adapter drives, or null if none. */
+    fun firstDrivenPackage(packageNames: List<String>): String? =
+        packageNames.firstOrNull { pkg -> adapters.any { it.handlesPackage(pkg) } }
 }

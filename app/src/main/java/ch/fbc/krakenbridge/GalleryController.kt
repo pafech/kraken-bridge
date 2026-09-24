@@ -113,6 +113,13 @@ class GalleryController(
      * image viewer set as default may not handle video — in which case
      * launching with no setPackage shows a chooser dialog. Falls back to
      * an image probe when no media exists yet.
+     *
+     * With several viewers installed and none set as default, Android
+     * resolves to its own chooser (package "android"), which is not a launch
+     * target — pinning to it made the Back button fail silently. There is no
+     * user default to honour in that case, so the first viewer a vendor
+     * adapter drives (e.g. Google Photos next to Files by Google) is used.
+     * Null when no such viewer exists; the adapter then launches unpinned.
      */
     private fun resolveDefaultGalleryPackage(latest: Pair<Uri, String>?): String? {
         val (probeUri, probeMime) = latest
@@ -120,8 +127,17 @@ class GalleryController(
         val probe = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(probeUri, probeMime)
         }
-        return context.packageManager.resolveActivity(probe, PackageManager.MATCH_DEFAULT_ONLY)
+        val packageManager = context.packageManager
+        val viewers = packageManager
+            .queryIntentActivities(probe, PackageManager.MATCH_DEFAULT_ONLY)
+            .map { it.activityInfo.packageName }
+        val resolved = packageManager.resolveActivity(probe, PackageManager.MATCH_DEFAULT_ONLY)
             ?.activityInfo?.packageName
+        // A user default (or a single viewer) resolves to one of the viewers.
+        if (resolved != null && resolved in viewers) return resolved
+        return VendorRegistry.firstDrivenPackage(viewers).also {
+            Log.i(TAG, "No default viewer for $probeMime among $viewers — using $it")
+        }
     }
 
     private fun openAppSettings() {
