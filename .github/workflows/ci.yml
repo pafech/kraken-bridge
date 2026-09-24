@@ -9,8 +9,10 @@ name: CI
 #
 # release.yml also calls this workflow (workflow_call) and makes its release
 # job wait for it, so a tag on a commit whose pipeline is red never publishes.
-# In that call github.run_number is the release run's counter, so the ci-<sha>
-# artifacts of that run carry a low versionCode — use the release artifacts.
+# In that call github.run_number is the release run's counter, so a ci-<sha>
+# build there would carry a low versionCode that Play rejects. Its APK and
+# AAB are therefore not uploaded (github.workflow is the caller's name,
+# "Release"); the release job publishes the only shippable artifacts.
 on:
   push:
     branches: ["main"]
@@ -140,8 +142,9 @@ jobs:
         run: rm -f "$RUNNER_TEMP/release.jks"
 
       - name: Upload release APK
-        # An unsigned build (no keystore) is not shippable, so it is not offered.
-        if: env.KEYSTORE_PATH != ''
+        # An unsigned build (no keystore) is not shippable, so it is not
+        # offered; neither is the build of the release gate (see the header).
+        if: env.KEYSTORE_PATH != '' && github.workflow == 'CI'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kraken-bridge-${{ env.VERSION_NAME }}-apk
@@ -149,7 +152,7 @@ jobs:
           retention-days: 3
 
       - name: Upload release AAB
-        if: env.KEYSTORE_PATH != ''
+        if: env.KEYSTORE_PATH != '' && github.workflow == 'CI'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kraken-bridge-${{ env.VERSION_NAME }}-playstore-aab
