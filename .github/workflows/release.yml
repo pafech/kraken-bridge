@@ -12,8 +12,17 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # The full pipeline (lint, unit tests, signed build, BDD) runs first. A red
+  # pipeline blocks the release — a tag alone is not proof that the tagged
+  # commit passed CI.
+  ci:
+    name: CI gate
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
   release:
     name: Build & publish signed release APK
+    needs: ci
     runs-on: ubuntu-latest
 
     permissions:

@@ -6,11 +6,17 @@ name: CI
 # build); this CI workflow produces a release-capable signed APK + AAB on every
 # main commit so any green build can be promoted to the Play Store without an
 # extra rebuild.
+#
+# release.yml also calls this workflow (workflow_call) and makes its release
+# job wait for it, so a tag on a commit whose pipeline is red never publishes.
+# In that call github.run_number is the release run's counter, so the ci-<sha>
+# artifacts of that run carry a low versionCode — use the release artifacts.
 on:
   push:
     branches: ["main"]
   pull_request:
     branches: ["main"]
+  workflow_call:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
