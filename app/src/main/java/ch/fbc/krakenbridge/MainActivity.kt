@@ -5,80 +5,64 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
-import android.content.*
+import android.content.ActivityNotFoundException
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
+import android.os.Process
 import android.provider.Settings
+import android.util.Log
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import ch.fbc.krakenbridge.ui.AccessibilityConsentScreen
+import ch.fbc.krakenbridge.ui.AccessibilityDisclosureDialog
 import ch.fbc.krakenbridge.ui.AppHeader
-import ch.fbc.krakenbridge.ui.ConsentActionButtons
 import ch.fbc.krakenbridge.ui.ChevronLeftIcon
 import ch.fbc.krakenbridge.ui.ChevronRightIcon
+import ch.fbc.krakenbridge.ui.EdgeHandle
 import ch.fbc.krakenbridge.ui.FeaturePermission
 import ch.fbc.krakenbridge.ui.FeatureSection
 import ch.fbc.krakenbridge.ui.HelpScreen
 import ch.fbc.krakenbridge.ui.InfoIcon
 import ch.fbc.krakenbridge.ui.KrakenBridgeTheme
 import ch.fbc.krakenbridge.ui.MainScreen
+import ch.fbc.krakenbridge.ui.RevokePromptDialog
 import ch.fbc.krakenbridge.ui.SettingsGearIcon
 import ch.fbc.krakenbridge.ui.SettingsPage
 import ch.fbc.krakenbridge.ui.WaveBackground
 import kotlinx.coroutines.launch
-
-// D-shape — flat side hugs the screen edge, the two inner corners round
-// to a perfect half-circle (50% radius like CSS border-radius: 50%) so a
-// circular icon nests inside snugly.
-private val leftHandleShape = RoundedCornerShape(
-    topStartPercent = 0,
-    topEndPercent = 50,
-    bottomEndPercent = 50,
-    bottomStartPercent = 0
-)
-
-private val rightHandleShape = RoundedCornerShape(
-    topStartPercent = 50,
-    topEndPercent = 0,
-    bottomEndPercent = 0,
-    bottomStartPercent = 50
-)
 
 /**
  * Runtime permission state pair. `needsSettings` is true when the OS will
@@ -95,7 +79,14 @@ private data class PermissionState(
 
 class MainActivity : ComponentActivity() {
 
+    private companion object {
+        const val TAG = "MainActivity"
+    }
+
     private enum class RevokePrompt { Gallery, DiveMode }
+
+    // Pager pages, left to right — the declaration order is the page index.
+    private enum class Page { Settings, Main, Help }
 
     // Tracks which optional feature the user just toggled ON. The corresponding
     // permission launcher uses this to revert the toggle if the user denies —
@@ -107,7 +98,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var uiHints: UiHints
 
     private var features by mutableStateOf(Features.CameraOnly)
-    private var revokePrompts by mutableStateOf<List<RevokePrompt>>(emptyList())
+    private var revokePrompt by mutableStateOf<RevokePrompt?>(null)
     private var pendingToggle: PendingToggle? = null
     private var mainPageOpened by mutableStateOf(false)
 
@@ -131,10 +122,8 @@ class MainActivity : ComponentActivity() {
     private var a11yDisclosureDismissedThisSession by mutableStateOf(false)
     private var showA11yDisclosure by mutableStateOf(false)
 
-    // Sequential Camera setup state. Holds the permission key the chain is
-    // currently waiting on. If onPermissionResult sees the same key still
-    // missing, the user denied → chain stops. Null means no chain running.
-    private var cameraSetupAwaiting: String? = null
+    // Sequential Camera setup chain (see CameraSetup.kt for the transitions).
+    private var cameraSetup: CameraSetupProgress = CameraSetupProgress.Idle
 
     private var airplaneModeOn by mutableStateOf(false)
     private var bluetoothAdapterEnabled by mutableStateOf(false)
@@ -201,12 +190,8 @@ class MainActivity : ComponentActivity() {
         mainPageOpened = uiHints.mainPageOpened
         a11yDisclosureAccepted = uiHints.a11yDisclosureAccepted
         features = featureRepo.load()
-        // refreshPermissionState reads OS state (perms granted, battery, overlay).
-        // accessibilityEnabled lives outside that — query it eagerly so the
-        // initial-page decision sees the full picture.
-        accessibilityEnabled = isAccessibilityServiceEnabled()
         refreshPermissionState()
-        val initialPage = if (allRequiredPermissionsGranted()) 1 else 0
+        val initialPage = if (allRequiredPermissionsGranted()) Page.Main else Page.Settings
 
         setContent {
             KrakenBridgeTheme {
@@ -227,8 +212,13 @@ class MainActivity : ComponentActivity() {
                             onDecline = { a11yDisclosureDismissedThisSession = true }
                         )
                     } else {
-                        revokePrompts.firstOrNull()?.let { prompt -> RevokePromptDialog(prompt) }
-                        if (showA11yDisclosure) AccessibilityDisclosureDialog()
+                        revokePrompt?.let { prompt -> RevokePromptFor(prompt) }
+                        if (showA11yDisclosure) {
+                            AccessibilityDisclosureDialog(
+                                onAccept = { onAccessibilityConsentAccepted() },
+                                onDecline = { onAccessibilityConsentDeclined() }
+                            )
+                        }
                         Box(modifier = Modifier.fillMaxSize()) {
                             WaveBackground()
                             MainPager(initialPage)
@@ -252,8 +242,12 @@ class MainActivity : ComponentActivity() {
      * header height as a top inset so their content starts below it.
      */
     @Composable
-    private fun MainPager(initialPage: Int) {
-        val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { 3 })
+    private fun MainPager(initialPage: Page) {
+        val pagerState = rememberPagerState(
+            initialPage = initialPage.ordinal,
+            pageCount = { Page.entries.size }
+        )
+        val currentPage = Page.entries[pagerState.currentPage]
         val scope = rememberCoroutineScope()
         // Live connection state straight from the BLE service. Unlike the
         // status broadcast + on-resume replay this replaced, a StateFlow
@@ -266,8 +260,8 @@ class MainActivity : ComponentActivity() {
         // First time the pager lands on Main (page 1), retire the inline
         // "Swipe to main screen" CTA on the Settings page so subsequent
         // visits stay calm. Persisted, so it doesn't return on relaunch.
-        LaunchedEffect(pagerState.currentPage) {
-            if (pagerState.currentPage == 1 && !mainPageOpened) {
+        LaunchedEffect(currentPage) {
+            if (currentPage == Page.Main && !mainPageOpened) {
                 mainPageOpened = true
                 uiHints.mainPageOpened = true
             }
@@ -277,29 +271,29 @@ class MainActivity : ComponentActivity() {
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
-            ) { page ->
-                when (page) {
-                    0 -> Box(modifier = Modifier.fillMaxSize().padding(top = headerInset)) {
+            ) { index ->
+                when (Page.entries[index]) {
+                    Page.Settings -> Box(modifier = Modifier.fillMaxSize().padding(top = headerInset)) {
                         SettingsPage(
                             sections = buildSections(),
-                            showReadyCta = cameraPermissionsReady() && !mainPageOpened,
+                            showReadyCta = cameraGrants().isReady && !mainPageOpened,
                             onReadyCtaClick = {
-                                scope.launch { pagerState.animateScrollToPage(1) }
+                                scope.launch { pagerState.animateScrollToPage(Page.Main.ordinal) }
                             }
                         )
                     }
-                    1 -> MainScreen(
+                    Page.Main -> MainScreen(
                         status = serviceState.status,
                         message = serviceState.message,
                         bluetoothEnabled = bluetoothAdapterEnabled,
                         airplaneModeOn = airplaneModeOn,
-                        cameraReady = cameraPermissionsReady(),
-                        onConnect = { startConnection() },
+                        cameraReady = cameraGrants().isReady,
+                        onConnect = { startBleService() },
                         onDisconnect = { stopConnection() },
                         onToggleBluetooth = { openBluetoothToggle() },
                         onToggleAirplaneMode = { openAirplaneModeSettings() }
                     )
-                    else -> Box(modifier = Modifier.fillMaxSize().padding(top = headerInset)) {
+                    Page.Help -> Box(modifier = Modifier.fillMaxSize().padding(top = headerInset)) {
                         HelpScreen(features = features)
                     }
                 }
@@ -312,10 +306,10 @@ class MainActivity : ComponentActivity() {
                     .onSizeChanged { headerHeightPx = it.height }
             )
 
-            if (pagerState.currentPage > 0) {
+            if (currentPage != Page.Settings) {
                 EdgeHandle(
                     onLeft = true,
-                    icon = if (pagerState.currentPage == 1) SettingsGearIcon else ChevronLeftIcon,
+                    icon = if (currentPage == Page.Main) SettingsGearIcon else ChevronLeftIcon,
                     onClick = {
                         scope.launch {
                             pagerState.animateScrollToPage(pagerState.currentPage - 1)
@@ -323,10 +317,10 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             }
-            if (pagerState.currentPage < 2) {
+            if (currentPage != Page.Help) {
                 EdgeHandle(
                     onLeft = false,
-                    icon = if (pagerState.currentPage == 1) InfoIcon else ChevronRightIcon,
+                    icon = if (currentPage == Page.Main) InfoIcon else ChevronRightIcon,
                     onClick = {
                         scope.launch {
                             pagerState.animateScrollToPage(pagerState.currentPage + 1)
@@ -337,45 +331,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @Composable
-    private fun BoxScope.EdgeHandle(
-        onLeft: Boolean,
-        icon: ImageVector,
-        onClick: () -> Unit
-    ) {
-        val shape = if (onLeft) leftHandleShape else rightHandleShape
-        val tint = MaterialTheme.colorScheme.onBackground
-        Box(
-            modifier = Modifier
-                .align(if (onLeft) Alignment.CenterStart else Alignment.CenterEnd)
-                .size(52.dp)
-                .clip(shape)
-                .background(Color.White.copy(alpha = 0.10f))
-                .border(width = 1.dp, color = tint.copy(alpha = 0.18f), shape = shape)
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = tint.copy(alpha = 0.85f),
-                modifier = Modifier.size(26.dp)
-            )
-        }
-    }
-
     override fun onStart() {
         super.onStart()
-        // System broadcasts (BT adapter state, airplane mode) — protected so
-        // the EXPORTED flag is what's appropriate per Android 14 guidance.
-        // Registering in onStart (vs onResume) keeps the chips truthful even
-        // when a Quick Settings panel is dragged over the UI.
+        // System broadcasts (BT adapter state, airplane mode). Both are
+        // protected broadcasts that only the system can send, and system
+        // broadcasts reach a NOT_EXPORTED receiver — so no other app gets a
+        // way in. Registering in onStart (vs onResume) keeps the chips
+        // truthful even when a Quick Settings panel is dragged over the UI.
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
         }
         ContextCompat.registerReceiver(
-            this, diveReadinessReceiver, filter, ContextCompat.RECEIVER_EXPORTED
+            this, diveReadinessReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED
         )
         // Initial sync — broadcasts only fire on transitions, so the very
         // first read after the app comes back from stopped needs a poll.
@@ -384,11 +352,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        try {
-            unregisterReceiver(diveReadinessReceiver)
-        } catch (e: IllegalArgumentException) {
-            // Receiver not registered
-        }
+        // Always registered in onStart — the lifecycle pairs the two calls.
+        unregisterReceiver(diveReadinessReceiver)
     }
 
     override fun onResume() {
@@ -396,7 +361,6 @@ class MainActivity : ComponentActivity() {
         // Connection status needs no resume-sync: the UI collects
         // KrakenBleService.state, which replays its current value on every
         // (re)subscription. Only OS-owned state has to be polled here.
-        accessibilityEnabled = isAccessibilityServiceEnabled()
         refreshPermissionState()
     }
 
@@ -434,7 +398,8 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Clean up permissions when the user disables an optional feature.
+     * Clean up permissions when the user disables an optional feature
+     * ([onGalleryTurnedOff], [onDiveModeTurnedOff]).
      *
      * Runtime perms (Media, via Gallery): [revokeSelfPermissionsOnKill] queues
      * the OS-level revocation, but Android only applies it on a "non-disruptive"
@@ -445,83 +410,56 @@ class MainActivity : ComponentActivity() {
      * Special access (SYSTEM_ALERT_WINDOW, via Dive Mode): no programmatic
      * revocation API exists. The dialog deep-links to Manage Overlay Permission.
      *
-     * "Later" in either dialog dismisses without further action — the queue is
-     * still pending on the OS side for Gallery, and the overlay perm stays
+     * "Later" in either dialog dismisses without further action — the revocation
+     * is still queued on the OS side for Gallery, and the overlay perm stays
      * granted until the user comes back through settings.
      */
-    private fun handleFeatureToggleOff(previous: Features, next: Features) {
-        val galleryOff = previous.gallery && !next.gallery
-        val diveModeOff = previous.diveMode && !next.diveMode
-        val queued = mutableListOf<RevokePrompt>()
-
-        if (galleryOff && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val mediaPerms = buildList {
-                add(Manifest.permission.READ_MEDIA_IMAGES)
-                add(Manifest.permission.READ_MEDIA_VIDEO)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-                }
-            }
-            try {
-                revokeSelfPermissionsOnKill(mediaPerms)
-                queued += RevokePrompt.Gallery
-            } catch (e: IllegalArgumentException) {
-                // Thrown when a permission is not a runtime permission or not
-                // declared by this package — nothing to revoke then.
-                android.util.Log.w("MainActivity", "Permission revocation failed: ${e.message}")
-            }
+    private fun onGalleryTurnedOff() {
+        revokePrompt = null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        try {
+            revokeSelfPermissionsOnKill(mediaPermissions())
+            revokePrompt = RevokePrompt.Gallery
+        } catch (e: IllegalArgumentException) {
+            // Thrown when a permission is not a runtime permission or not
+            // declared by this package — nothing to revoke then.
+            Log.w(TAG, "Permission revocation failed: ${e.message}")
         }
+    }
 
-        if (diveModeOff && Settings.canDrawOverlays(this)) {
-            queued += RevokePrompt.DiveMode
-        }
-
-        revokePrompts = queued
+    private fun onDiveModeTurnedOff() {
+        revokePrompt = if (Settings.canDrawOverlays(this)) RevokePrompt.DiveMode else null
     }
 
     @Composable
-    private fun RevokePromptDialog(prompt: RevokePrompt) {
-        val title: String
-        val message: String
-        val confirmLabel: String
-        val onConfirm: () -> Unit
+    private fun RevokePromptFor(prompt: RevokePrompt) {
+        val dismiss = { revokePrompt = null }
         when (prompt) {
-            RevokePrompt.Gallery -> {
-                title = "Revoke photo access?"
-                message = "Gallery is disabled. Restart Kraken now to revoke the Photos & Videos permission. You can grant it again later if you re-enable Gallery."
-                confirmLabel = "Restart now"
+            RevokePrompt.Gallery -> RevokePromptDialog(
+                title = "Revoke photo access?",
+                message = "Gallery is disabled. Restart Kraken now to revoke the Photos & Videos permission. You can grant it again later if you re-enable Gallery.",
+                confirmLabel = "Restart now",
                 onConfirm = {
                     finishAffinity()
-                    android.os.Process.killProcess(android.os.Process.myPid())
-                }
-            }
-            RevokePrompt.DiveMode -> {
-                title = "Revoke Display Overlay?"
-                message = "Dive Mode is disabled. The Display Overlay permission stays granted until you remove it in system settings."
-                confirmLabel = "Open settings"
+                    Process.killProcess(Process.myPid())
+                },
+                onDismiss = dismiss
+            )
+            RevokePrompt.DiveMode -> RevokePromptDialog(
+                title = "Revoke Display Overlay?",
+                message = "Dive Mode is disabled. The Display Overlay permission stays granted until you remove it in system settings.",
+                confirmLabel = "Open settings",
                 onConfirm = {
-                    revokePrompts = revokePrompts.drop(1)
+                    dismiss()
                     val intent = Intent(
                         Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         "package:$packageName".toUri()
                     )
                     startActivity(intent)
-                }
-            }
+                },
+                onDismiss = dismiss
+            )
         }
-        AlertDialog(
-            onDismissRequest = { revokePrompts = revokePrompts.drop(1) },
-            title = { Text(title) },
-            text = { Text(message) },
-            confirmButton = {
-                TextButton(onClick = onConfirm) { Text(confirmLabel) }
-            },
-            dismissButton = {
-                TextButton(onClick = { revokePrompts = revokePrompts.drop(1) }) {
-                    Text("Later")
-                }
-            }
-        )
     }
 
     private fun refreshPermissionState() {
@@ -578,6 +516,8 @@ class MainActivity : ComponentActivity() {
         batteryOptimizationExempt = pm.isIgnoringBatteryOptimizations(packageName)
 
         displayOverlayGranted = Settings.canDrawOverlays(this)
+
+        accessibilityEnabled = isAccessibilityServiceEnabled()
     }
 
     private fun isGranted(permission: String): Boolean =
@@ -595,12 +535,16 @@ class MainActivity : ComponentActivity() {
         return !ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
     }
 
-    private fun cameraPermissionsReady(): Boolean =
-        bluetooth.granted && location.granted && notifications.granted &&
-            batteryOptimizationExempt && accessibilityEnabled
+    private fun cameraGrants(): CameraGrants = CameraGrants(
+        bluetooth = bluetooth.granted,
+        location = location.granted,
+        notifications = notifications.granted,
+        batteryExemption = batteryOptimizationExempt,
+        accessibility = accessibilityEnabled
+    )
 
     private fun allRequiredPermissionsGranted(): Boolean =
-        cameraPermissionsReady() &&
+        cameraGrants().isReady &&
             (!features.gallery || media.granted) &&
             (!features.diveMode || displayOverlayGranted)
 
@@ -689,59 +633,8 @@ class MainActivity : ComponentActivity() {
      */
     private fun onAccessibilityConsentDeclined() {
         showA11yDisclosure = false
-        cameraSetupAwaiting = null
+        cameraSetup = CameraSetupProgress.Idle
         refreshPermissionState()
-    }
-
-    @Composable
-    private fun AccessibilityDisclosureDialog() {
-        AlertDialog(
-            onDismissRequest = { onAccessibilityConsentDeclined() },
-            properties = DialogProperties(
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false
-            ),
-            // Default textContentColor is onSurfaceVariant, which our
-            // darkColorScheme doesn't define — Material 3 falls back to a
-            // low-contrast grey on the dark surface. Pin title + body to
-            // onSurface (OceanText, ~12:1 on OceanCard) so the disclosure
-            // text is fully legible.
-            containerColor = MaterialTheme.colorScheme.surface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-            textContentColor = MaterialTheme.colorScheme.onSurface,
-            title = { Text("Allow Accessibility access?") },
-            text = {
-                Text(
-                    "Kraken Dive Photo uses Android's Accessibility Service to translate " +
-                        "your housing's Bluetooth button presses into taps and swipes in " +
-                        "your phone's camera and gallery apps while you're diving.\n\n" +
-                        "If you allow it, the service will be able to:\n" +
-                        "• Read on-screen content of the foreground camera or gallery app " +
-                        "to locate buttons (shutter, mode switch, delete, swipe targets).\n" +
-                        "• Perform taps and swipes on your behalf.\n\n" +
-                        "What Kraken Dive Photo does NOT do:\n" +
-                        "• It does not collect, store, log, or transmit any screen content " +
-                        "or personal data. Everything stays on this device.\n" +
-                        "• It does not record audio or capture screenshots.\n" +
-                        "• It does not interact with apps outside your active camera or " +
-                        "gallery session.\n\n" +
-                        "You can revoke this access at any time from Android Settings → " +
-                        "Accessibility, or by turning the Accessibility row off in this app."
-                )
-            },
-            // Both consent options live in the confirmButton slot as one
-            // full-width row of two equally-prominent buttons (see
-            // ConsentActionButtons). dismissButton is intentionally omitted so
-            // Material doesn't render a third, lower-emphasis control — the only
-            // negative option is the equally-weighted "Decline" button.
-            confirmButton = {
-                ConsentActionButtons(
-                    onAccept = { onAccessibilityConsentAccepted() },
-                    onDecline = { onAccessibilityConsentDeclined() },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        )
     }
 
     /**
@@ -752,35 +645,21 @@ class MainActivity : ComponentActivity() {
      * single permission row remains tappable for repair).
      */
     private fun startCameraSetup() {
-        cameraSetupAwaiting = ""
+        cameraSetup = CameraSetupProgress.Running(requested = null)
         advanceCameraSetup()
     }
 
     private fun advanceCameraSetup() {
-        val next = when {
-            !bluetooth.granted -> "bt"
-            !location.granted -> "loc"
-            !notifications.granted -> "notif"
-            !batteryOptimizationExempt -> "battery"
-            !accessibilityEnabled -> "a11y"
-            else -> null
-        }
-        if (next == null) {
-            cameraSetupAwaiting = null
-            return
-        }
-        // Same perm we just asked for is still missing → user denied → stop.
-        if (next == cameraSetupAwaiting) {
-            cameraSetupAwaiting = null
-            return
-        }
-        cameraSetupAwaiting = next
-        when (next) {
-            "bt" -> requestBluetooth()
-            "loc" -> requestLocation()
-            "notif" -> requestNotifications()
-            "battery" -> requestBatteryOptimization()
-            "a11y" -> requestAccessibility()
+        val running = cameraSetup as? CameraSetupProgress.Running ?: return
+        val next = running.advance(cameraGrants().firstMissing)
+        cameraSetup = next
+        val step = (next as? CameraSetupProgress.Running)?.requested ?: return
+        when (step) {
+            CameraSetupStep.Bluetooth -> requestBluetooth()
+            CameraSetupStep.Location -> requestLocation()
+            CameraSetupStep.Notifications -> requestNotifications()
+            CameraSetupStep.BatteryExemption -> requestBatteryOptimization()
+            CameraSetupStep.Accessibility -> requestAccessibility()
         }
     }
 
@@ -791,18 +670,24 @@ class MainActivity : ComponentActivity() {
             // require manual re-grant in app settings.
             openAppDetailsSettings(); return
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permissions = mutableListOf(
-                Manifest.permission.READ_MEDIA_IMAGES,
-                Manifest.permission.READ_MEDIA_VIDEO
-            )
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                permissions.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
-            }
-            runtimePermissionLauncher.launch(permissions.toTypedArray())
-        } else {
-            runtimePermissionLauncher.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
-        }
+        runtimePermissionLauncher.launch(mediaPermissions().toTypedArray())
+    }
+
+    /**
+     * Runtime permissions behind the Gallery feature. Request and revoke use
+     * this one list, so the two sets can never drift apart.
+     */
+    private fun mediaPermissions(): List<String> = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> listOf(
+            Manifest.permission.READ_MEDIA_IMAGES,
+            Manifest.permission.READ_MEDIA_VIDEO,
+            Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
+        )
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> listOf(
+            Manifest.permission.READ_MEDIA_IMAGES,
+            Manifest.permission.READ_MEDIA_VIDEO
+        )
+        else -> listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
     }
 
     /**
@@ -861,7 +746,6 @@ class MainActivity : ComponentActivity() {
      */
     private fun onPermissionResult() {
         refreshPermissionState()
-        accessibilityEnabled = isAccessibilityServiceEnabled()
 
         val pending = pendingToggle
         pendingToggle = null
@@ -877,9 +761,7 @@ class MainActivity : ComponentActivity() {
             null -> {}
         }
 
-        if (cameraSetupAwaiting != null) {
-            advanceCameraSetup()
-        }
+        advanceCameraSetup()
     }
 
     // Toggle handlers wired into SettingsPage. Optimistically flip the state,
@@ -888,7 +770,6 @@ class MainActivity : ComponentActivity() {
     // permission was denied.
 
     private fun setGalleryEnabled(enabled: Boolean) {
-        val previous = features
         val next = features.copy(gallery = enabled)
         features = next
         featureRepo.save(next)
@@ -897,12 +778,11 @@ class MainActivity : ComponentActivity() {
             pendingToggle = PendingToggle.Gallery
             requestMedia()
         } else {
-            handleFeatureToggleOff(previous, next)
+            onGalleryTurnedOff()
         }
     }
 
     private fun setDiveModeEnabled(enabled: Boolean) {
-        val previous = features
         val next = features.copy(diveMode = enabled)
         features = next
         featureRepo.save(next)
@@ -911,7 +791,7 @@ class MainActivity : ComponentActivity() {
             pendingToggle = PendingToggle.DiveMode
             requestDisplayOverlay()
         } else {
-            handleFeatureToggleOff(previous, next)
+            onDiveModeTurnedOff()
         }
     }
 
@@ -925,8 +805,8 @@ class MainActivity : ComponentActivity() {
             // walkthrough), locked after grant since Camera is the core
             // feature and cannot be turned off.
             isMandatory = true,
-            isLocked = cameraPermissionsReady(),
-            isEnabled = cameraPermissionsReady(),
+            isLocked = cameraGrants().isReady,
+            isEnabled = cameraGrants().isReady,
             onToggle = { if (it) startCameraSetup() },
             permissions = listOfNotNull(
                 permRow("Bluetooth", bluetooth.granted, ::toggleBluetooth),
@@ -1021,18 +901,6 @@ class MainActivity : ComponentActivity() {
             it.resolveInfo.serviceInfo.packageName == packageName &&
                 it.resolveInfo.serviceInfo.name == KrakenAccessibilityService::class.java.name
         }
-    }
-
-    private fun startConnection() {
-        // The hero circle is gated by `bluetoothAdapterEnabled` in MainScreen
-        // — a tap only reaches us when BT is already on. The BT chip handles
-        // the off-state path via openBluetoothToggle() / ACTION_REQUEST_ENABLE.
-        val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-        if (adapter == null) {
-            Toast.makeText(this, "This device has no Bluetooth", Toast.LENGTH_SHORT).show()
-            return
-        }
-        startBleService()
     }
 
     private fun startBleService() {
