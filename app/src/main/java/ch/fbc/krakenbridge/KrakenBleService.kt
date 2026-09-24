@@ -47,6 +47,9 @@ class KrakenBleService : Service() {
         const val NOTIFICATION_ID = 1
         const val CHANNEL_ID = "kraken_ble_channel"
 
+        // CPU time the wake activity needs to turn the screen on.
+        private const val WAKE_SCREEN_CPU_LOCK_MS = 3_000L
+
         @Volatile
         var instance: KrakenBleService? = null
             private set
@@ -103,17 +106,15 @@ class KrakenBleService : Service() {
     private var screenReceiverRegistered = false
 
     private val connectionListener = object : BleConnectionManager.Listener {
-        override fun onStatus(status: ConnectionStatus, message: String) =
-            updateStatus(status, message)
+        override fun onStatus(status: ConnectionStatus, message: String, detail: String?) =
+            updateStatus(status, message, detail)
 
         override fun onConnected() = wakeLocks.acquireConnection()
 
         override fun onDisconnected() = wakeLocks.releaseConnection()
 
-        override fun onButtonsReady() {
-            val modeName = if (currentState.isVideoMode) "VIDEO" else "PHOTO"
-            updateStatus(ConnectionStatus.Ready, "Ready - $modeName mode")
-        }
+        override fun onButtonsReady() =
+            updateStatus(ConnectionStatus.Ready, currentState.readyMessage)
 
         override fun onButtonEvent(code: Int) = buttonRouter.route(code)
     }
@@ -328,10 +329,10 @@ class KrakenBleService : Service() {
             PowerManager.PARTIAL_WAKE_LOCK,
             "KrakenBridge:WakeBoot"
         )
-        cpuWakeLock.acquire(3000)
+        cpuWakeLock.acquire(WAKE_SCREEN_CPU_LOCK_MS)
         handler.postDelayed({
             if (cpuWakeLock.isHeld) cpuWakeLock.release()
-        }, 3000)
+        }, WAKE_SCREEN_CPU_LOCK_MS)
 
         try {
             val intent = Intent(this, KrakenWakeActivity::class.java).apply {
@@ -411,9 +412,13 @@ class KrakenBleService : Service() {
         if (::overlayManager.isInitialized) overlayManager.onUserActivity()
     }
 
-    /** Publish a connection-status transition to the notification and [state]. */
-    private fun updateStatus(status: ConnectionStatus, message: String) {
+    /**
+     * Publish a connection-status transition to the notification and [state].
+     * [detail] replaces the previous one, so a stale error never outlives the
+     * transition that ended it.
+     */
+    private fun updateStatus(status: ConnectionStatus, message: String, detail: String? = null) {
         updateNotification(message)
-        mutableState.update { it.copy(status = status, message = message) }
+        mutableState.update { it.copy(status = status, message = message, detail = detail) }
     }
 }

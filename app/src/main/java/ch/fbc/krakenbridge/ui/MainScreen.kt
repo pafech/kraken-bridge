@@ -46,7 +46,7 @@ private enum class ConnectionPhase { Idle, Busy, Ready }
 @Composable
 fun MainScreen(
     status: ConnectionStatus,
-    message: String,
+    detail: String?,
     bluetoothEnabled: Boolean,
     airplaneModeOn: Boolean,
     cameraReady: Boolean,
@@ -131,7 +131,7 @@ fun MainScreen(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = subInfo(phase, status, message, cameraReady),
+                    text = subInfo(phase, detail, cameraReady),
                     fontSize = 14.sp,
                     color = OceanTextMuted,
                     textAlign = TextAlign.Center,
@@ -142,15 +142,13 @@ fun MainScreen(
     }
 }
 
-// Sub-info logic: prefer service messages when they carry information
-// beyond the status word (errors, "Limited photo access…"); otherwise
-// fall back to per-phase guidance. Permission gaps take precedence — the
-// connect path is unreachable until Camera-required perms are granted.
-private fun subInfo(phase: ConnectionPhase, status: ConnectionStatus, message: String, cameraReady: Boolean): String {
+// Sub-info logic: prefer the service's detail (errors, "Limited photo
+// access…"); otherwise fall back to per-phase guidance. Permission gaps take
+// precedence — the connect path is unreachable until Camera-required perms
+// are granted.
+private fun subInfo(phase: ConnectionPhase, detail: String?, cameraReady: Boolean): String {
     if (!cameraReady) return "Permissions needed\nSwipe left to Settings"
-    val carriesNewInfo = message.isNotBlank() &&
-        !message.lowercase().startsWith(status.name.lowercase())
-    if (carriesNewInfo) return message
+    if (detail != null) return detail
     return when (phase) {
         ConnectionPhase.Idle -> "Tap the circle to connect"
         ConnectionPhase.Busy -> "Searching for Kraken — tap to cancel"

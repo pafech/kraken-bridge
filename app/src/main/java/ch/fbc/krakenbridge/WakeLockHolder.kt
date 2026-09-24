@@ -34,7 +34,7 @@ class WakeLockHolder(
                 "KrakenBridge:Connection"
             ).apply { setReferenceCounted(false) }
         }
-        connectionLock?.acquire(4 * 60 * 60 * 1000L) // 4 hours max for a dive
+        connectionLock?.acquire(CONNECTION_LOCK_TIMEOUT_MS)
         Log.i(KrakenBleService.TAG, "Connection wake lock acquired")
     }
 
@@ -55,7 +55,7 @@ class WakeLockHolder(
                 "KrakenBridge:VideoRecording"
             ).apply { setReferenceCounted(false) }
         }
-        videoLock?.acquire(60 * 60 * 1000L) // 1 hour max for a single video
+        videoLock?.acquire(VIDEO_LOCK_TIMEOUT_MS)
         onVideoLockChanged(true)
         Log.i(KrakenBleService.TAG, "Video recording wake lock acquired - screen will stay on")
     }
@@ -68,5 +68,12 @@ class WakeLockHolder(
             }
         }
         onVideoLockChanged(false)
+    }
+
+    private companion object {
+        // Safety caps in case a release is ever missed: a dive day's session,
+        // and a single video.
+        const val CONNECTION_LOCK_TIMEOUT_MS = 4 * 60 * 60 * 1000L
+        const val VIDEO_LOCK_TIMEOUT_MS = 60 * 60 * 1000L
     }
 }

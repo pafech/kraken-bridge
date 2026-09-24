@@ -12,6 +12,12 @@ import org.junit.Test
 class KrakenServiceStateTest {
 
     @Test
+    fun `ready message names the capture mode`() {
+        assertEquals("Ready - PHOTO mode", KrakenServiceState().readyMessage)
+        assertEquals("Ready - VIDEO mode", KrakenServiceState(isVideoMode = true).readyMessage)
+    }
+
+    @Test
     fun `camera opened sets the flag and nothing else`() {
         val before = KrakenServiceState(isVideoMode = true)
         val after = before.withCameraOpened()

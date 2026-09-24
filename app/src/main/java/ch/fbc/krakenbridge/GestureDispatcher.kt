@@ -26,7 +26,7 @@ class GestureDispatcher(
         }
 
         val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, 50))
+            .addStroke(GestureDescription.StrokeDescription(path, 0, TAP_DURATION_MS))
             .build()
 
         service.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
@@ -88,10 +88,11 @@ class GestureDispatcher(
      */
     fun gallerySwipe(next: Boolean) {
         val y = screenHeight() * 0.5f
-        val startX = if (next) screenWidth() * 0.8f else screenWidth() * 0.2f
-        val endX = if (next) screenWidth() * 0.2f else screenWidth() * 0.8f
+        val right = screenWidth() * GALLERY_SWIPE_RIGHT_X
+        val left = screenWidth() * GALLERY_SWIPE_LEFT_X
+        val (startX, endX) = if (next) right to left else left to right
         Log.i(TAG, "Gallery swipe (next=$next)")
-        swipe(startX, y, endX, y, durationMs = 200L)
+        swipe(startX, y, endX, y, durationMs = GALLERY_SWIPE_DURATION_MS)
     }
 
     /**
@@ -103,14 +104,14 @@ class GestureDispatcher(
      */
     fun focusTap(zone: FocusZone) {
         val x = screenWidth() / 2f
-        val viewfinderTop = screenHeight() * 0.05f
-        val viewfinderBottom = screenHeight() * 0.58f
+        val viewfinderTop = screenHeight() * VIEWFINDER_TOP_Y
+        val viewfinderBottom = screenHeight() * VIEWFINDER_BOTTOM_Y
         val viewfinderHeight = viewfinderBottom - viewfinderTop
 
         val y = when (zone) {
-            FocusZone.NEAR -> viewfinderBottom - (viewfinderHeight * 0.15f)   // Bottom of viewfinder
-            FocusZone.CENTER -> viewfinderTop + (viewfinderHeight * 0.5f)     // Center of viewfinder
-            FocusZone.FAR -> viewfinderTop + (viewfinderHeight * 0.15f)       // Top of viewfinder
+            FocusZone.NEAR -> viewfinderBottom - (viewfinderHeight * FOCUS_EDGE_INSET)
+            FocusZone.CENTER -> viewfinderTop + (viewfinderHeight * 0.5f)
+            FocusZone.FAR -> viewfinderTop + (viewfinderHeight * FOCUS_EDGE_INSET)
         }
 
         Log.i(TAG, "Focus tap at zone $zone: ($x, $y)")
@@ -119,5 +120,18 @@ class GestureDispatcher(
 
     private companion object {
         const val TAG = KrakenAccessibilityService.TAG
+
+        const val TAP_DURATION_MS = 50L
+
+        // Gallery swipe runs between 80 % and 20 % of the screen width.
+        const val GALLERY_SWIPE_RIGHT_X = 0.8f
+        const val GALLERY_SWIPE_LEFT_X = 0.2f
+        const val GALLERY_SWIPE_DURATION_MS = 200L
+
+        // Viewfinder band (screen-relative) and how far inside its top and
+        // bottom edges the far / near focus taps land.
+        const val VIEWFINDER_TOP_Y = 0.05f
+        const val VIEWFINDER_BOTTOM_Y = 0.58f
+        const val FOCUS_EDGE_INSET = 0.15f
     }
 }

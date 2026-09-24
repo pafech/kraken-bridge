@@ -50,8 +50,12 @@ class BleConnectionManager(
 
     /** Service-side reactions to connection events. */
     interface Listener {
-        /** A user-visible status transition (notification + state flow). */
-        fun onStatus(status: ConnectionStatus, message: String)
+        /**
+         * A user-visible status transition (notification + state flow).
+         * [detail] is what the main screen shows under the status word —
+         * set only when the message tells the diver more than the status.
+         */
+        fun onStatus(status: ConnectionStatus, message: String, detail: String? = null)
 
         /** GATT link established — acquire the connection wake lock. */
         fun onConnected()
@@ -90,7 +94,7 @@ class BleConnectionManager(
     private val connectionCheckRunnable = object : Runnable {
         override fun run() {
             checkConnectionHealth()
-            handler.postDelayed(this, 5000) // Check every 5 seconds
+            handler.postDelayed(this, HEALTH_CHECK_INTERVAL_MS)
         }
     }
 
@@ -105,7 +109,7 @@ class BleConnectionManager(
     // and avoid invoking discoverServices() on a closed GATT.
     private val serviceDiscoveryStartRunnable = Runnable {
         val gatt = bluetoothGatt ?: return@Runnable
-        handler.postDelayed(serviceDiscoveryTimeoutRunnable, 10000)
+        handler.postDelayed(serviceDiscoveryTimeoutRunnable, SERVICE_DISCOVERY_TIMEOUT_MS)
         gatt.discoverServices()
     }
 
@@ -127,7 +131,7 @@ class BleConnectionManager(
             // The scanner is not running — clear the flag, or every later
             // startScan() returns early until the 30 s timeout fires.
             scanning = false
-            listener.onStatus(ConnectionStatus.Error, "Scan failed: $errorCode")
+            reportWithDetail(ConnectionStatus.Error, "Scan failed: $errorCode")
         }
     }
 
@@ -148,7 +152,7 @@ class BleConnectionManager(
                     reconnectScheduled = false
                     startConnectionMonitoring()
                     // Discover services after connection; cancel if it takes > 10s
-                    handler.postDelayed(serviceDiscoveryStartRunnable, 500)
+                    handler.postDelayed(serviceDiscoveryStartRunnable, SERVICE_DISCOVERY_DELAY_MS)
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Log.i(TAG, "Disconnected from Kraken (status=$status, userDisconnect=$isUserDisconnect)")
@@ -164,7 +168,7 @@ class BleConnectionManager(
                 enableButtonNotifications(gatt)
             } else {
                 Log.e(TAG, "Service discovery failed: $status")
-                listener.onStatus(ConnectionStatus.Error, "Service discovery failed")
+                reportWithDetail(ConnectionStatus.Error, "Service discovery failed")
             }
         }
 
@@ -201,7 +205,7 @@ class BleConnectionManager(
                 // Force disconnect so the standard reconnect path runs — otherwise
                 // the notification keeps saying "Connected" with non-working buttons.
                 Log.e(TAG, "Failed to enable notifications: $status — forcing disconnect to retry")
-                listener.onStatus(ConnectionStatus.Error, "Failed to enable notifications")
+                reportWithDetail(ConnectionStatus.Error, "Failed to enable notifications")
                 gatt.disconnect()
             }
         }
@@ -245,7 +249,7 @@ class BleConnectionManager(
             listener.onStatus(ConnectionStatus.Disconnected, "Disconnected")
         } else {
             // Unexpected disconnect - try to reconnect
-            listener.onStatus(ConnectionStatus.Reconnecting, "Connection lost - reconnecting...")
+            reportWithDetail(ConnectionStatus.Reconnecting, "Connection lost - reconnecting...")
             attemptReconnect()
         }
     }
@@ -277,13 +281,13 @@ class BleConnectionManager(
         // error that crashes the foreground service. Guard explicitly.
         val adapter = bluetoothAdapter
         if (adapter == null || !adapter.isEnabled) {
-            listener.onStatus(ConnectionStatus.Error, "Turn on Bluetooth to connect")
+            reportWithDetail(ConnectionStatus.Error, "Turn on Bluetooth to connect")
             return false
         }
 
         val scanner = adapter.bluetoothLeScanner
         if (scanner == null) {
-            listener.onStatus(ConnectionStatus.Error, "Bluetooth not available")
+            reportWithDetail(ConnectionStatus.Error, "Bluetooth not available")
             return false
         }
 
@@ -296,13 +300,12 @@ class BleConnectionManager(
         scanner.startScan(null, settings, scanCallback)
         scanning = true
 
-        // Stop scan after 30 seconds
         handler.postDelayed({
             if (scanning && bluetoothGatt == null) {
                 stopScan()
-                listener.onStatus(ConnectionStatus.Error, "Kraken not found")
+                reportWithDetail(ConnectionStatus.Error, "Kraken not found")
             }
-        }, 30000)
+        }, SCAN_TIMEOUT_MS)
         return true
     }
 
@@ -376,14 +379,14 @@ class BleConnectionManager(
         val service = gatt.getService(BUTTON_SERVICE_UUID)
         if (service == null) {
             Log.e(TAG, "Button service not found")
-            listener.onStatus(ConnectionStatus.Error, "Button service not found")
+            reportWithDetail(ConnectionStatus.Error, "Button service not found")
             return
         }
 
         val characteristic = service.getCharacteristic(BUTTON_CHAR_UUID)
         if (characteristic == null) {
             Log.e(TAG, "Button characteristic not found")
-            listener.onStatus(ConnectionStatus.Error, "Button characteristic not found")
+            reportWithDetail(ConnectionStatus.Error, "Button characteristic not found")
             return
         }
 
@@ -403,9 +406,13 @@ class BleConnectionManager(
             }
         } else {
             Log.w(TAG, "CCCD descriptor not found, notifications may not work")
-            listener.onStatus(ConnectionStatus.Ready, "Connected (no CCCD)")
+            reportWithDetail(ConnectionStatus.Ready, "Connected (no CCCD)")
         }
     }
+
+    /** A status whose message the main screen also shows under the status word. */
+    private fun reportWithDetail(status: ConnectionStatus, message: String) =
+        listener.onStatus(status, message, detail = message)
 
     private fun extractButtonCode(
         characteristic: BluetoothGattCharacteristic,
@@ -417,7 +424,7 @@ class BleConnectionManager(
 
     private fun startConnectionMonitoring() {
         handler.removeCallbacks(connectionCheckRunnable)
-        handler.postDelayed(connectionCheckRunnable, 5000)
+        handler.postDelayed(connectionCheckRunnable, HEALTH_CHECK_INTERVAL_MS)
         Log.d(TAG, "Connection monitoring started")
     }
 
@@ -431,7 +438,7 @@ class BleConnectionManager(
         if (gatt == null) {
             Log.w(TAG, "Connection check: GATT is null, connection lost")
             stopConnectionMonitoring()  // Stop loop before reconnecting — prevents cascading attempts
-            listener.onStatus(ConnectionStatus.Reconnecting, "Connection lost - reconnecting...")
+            reportWithDetail(ConnectionStatus.Reconnecting, "Connection lost - reconnecting...")
             attemptReconnect()
             return
         }
@@ -459,14 +466,14 @@ class BleConnectionManager(
         val device = lastConnectedDevice
         if (device == null) {
             Log.w(TAG, "Cannot reconnect: no last connected device")
-            listener.onStatus(ConnectionStatus.Disconnected, "Disconnected - press Connect to retry")
+            listener.onStatus(ConnectionStatus.Disconnected, "Disconnected - open the app to reconnect")
             return
         }
 
         if (backoff.isExhausted) {
             Log.w(TAG, "Max reconnect attempts (${ReconnectBackoff.MAX_ATTEMPTS}) reached — falling back to scan")
             backoff.reset()
-            listener.onStatus(ConnectionStatus.Scanning, "Reconnect failed - scanning for Kraken...")
+            reportWithDetail(ConnectionStatus.Scanning, "Reconnect failed - scanning for Kraken...")
             startScan()
             return
         }
@@ -485,6 +492,17 @@ class BleConnectionManager(
     }
 
     companion object {
+        // RSSI read cadence that detects a silently dropped link.
+        private const val HEALTH_CHECK_INTERVAL_MS = 5_000L
+
+        // Grace before discoverServices() — some stacks reject an early call —
+        // and the limit after which a stuck discovery forces a reconnect.
+        private const val SERVICE_DISCOVERY_DELAY_MS = 500L
+        private const val SERVICE_DISCOVERY_TIMEOUT_MS = 10_000L
+
+        // A scan that finds no housing in this time reports "Kraken not found".
+        private const val SCAN_TIMEOUT_MS = 30_000L
+
         // Kraken housing BLE identifiers
         private const val DEVICE_NAME = "Kraken"
 

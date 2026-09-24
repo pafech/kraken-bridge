@@ -143,8 +143,7 @@ class AccessibilityNodeFinder(
     fun bottomActionBarItems(): List<AccessibilityNodeInfo> {
         val root = root() ?: return emptyList()
 
-        // Bottom action bar is typically in the bottom 15% of the screen
-        val minY = screenHeight() * 0.85f
+        val minY = screenHeight() * BOTTOM_BAR_TOP_Y
         val maxY = screenHeight().toFloat()
 
         return collectClickableNodesInRegion(root, 0f, screenWidth().toFloat(), minY, maxY)
@@ -282,5 +281,8 @@ class AccessibilityNodeFinder(
 
     private companion object {
         const val TAG = KrakenAccessibilityService.TAG
+
+        // Bottom action bars sit in the bottom 15 % of the screen.
+        const val BOTTOM_BAR_TOP_Y = 0.85f
     }
 }

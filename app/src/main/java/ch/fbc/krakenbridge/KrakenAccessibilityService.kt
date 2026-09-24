@@ -33,6 +33,12 @@ class KrakenAccessibilityService : AccessibilityService() {
     companion object {
         const val TAG = "KrakenA11y"
 
+        // Quick-delete timing: let the viewer's controls settle, give the
+        // confirm dialog time to animate in, retry the confirm once if slow.
+        private const val DELETE_START_DELAY_MS = 200L
+        private const val DELETE_CONFIRM_DELAY_MS = 1_500L
+        private const val DELETE_CONFIRM_RETRY_DELAY_MS = 600L
+
         @Volatile
         private var connected: KrakenAccessibilityService? = null
 
@@ -217,7 +223,7 @@ class KrakenAccessibilityService : AccessibilityService() {
             }
 
             // Wait for confirmation dialog to animate in, then confirm.
-            // On slow devices the dialog may not be accessible yet; retry once after 600ms.
+            // On slow devices the dialog may not be accessible yet; retry once.
             handler.postDelayed({
                 Log.i(TAG, "Step 2: Confirming deletion")
                 val confirmed = adapter.clickConfirmDelete(this)
@@ -225,10 +231,10 @@ class KrakenAccessibilityService : AccessibilityService() {
                     handler.postDelayed({
                         Log.w(TAG, "Step 2 retry: confirm dialog not ready on first attempt")
                         adapter.clickConfirmDelete(this)
-                    }, 600)
+                    }, DELETE_CONFIRM_RETRY_DELAY_MS)
                 }
-            }, 1500)
-        }, 200)
+            }, DELETE_CONFIRM_DELAY_MS)
+        }, DELETE_START_DELAY_MS)
     }
 
     /**

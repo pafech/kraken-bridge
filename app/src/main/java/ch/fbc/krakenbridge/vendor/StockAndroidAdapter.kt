@@ -36,6 +36,13 @@ object StockAndroidAdapter : VendorAdapter {
     private const val TRASH_Y = 1.034f
     private const val CONFIRM_X = 0.3f
     private const val CONFIRM_Y = 0.94f
+    // Region search for the trash button: the bottom-right corner.
+    private const val TRASH_REGION_MIN_X = 0.75f
+    private const val TRASH_REGION_MIN_Y = 0.85f
+
+    // Overflow-menu delete item: poll until the dropdown has animated in.
+    private const val OVERFLOW_POLL_INTERVAL_MS = 200L
+    private const val OVERFLOW_POLL_RETRIES = 5
 
     override fun handlesPackage(packageName: String): Boolean =
         packageName == PKG_GOOGLE_CAMERA || packageName == PKG_GOOGLE_PHOTOS
@@ -177,7 +184,7 @@ object StockAndroidAdapter : VendorAdapter {
                 // Overflow menu opened; the delete item will be searched and
                 // clicked on the main-looper handler once the dropdown has
                 // animated in. Return early — dispatchQuickDelete's confirm
-                // step still fires after its own 1500 ms wait, which covers
+                // step still fires after its own confirm delay, which covers
                 // the worst-case open + retry budget here.
                 return true
             }
@@ -201,9 +208,9 @@ object StockAndroidAdapter : VendorAdapter {
 
         if (node == null) {
             Log.d(TAG, "Trying region-based search for trash button")
-            val minX = svc.screenWidth * 0.75f
+            val minX = svc.screenWidth * TRASH_REGION_MIN_X
             val maxX = svc.screenWidth.toFloat()
-            val minY = svc.screenHeight * 0.85f
+            val minY = svc.screenHeight * TRASH_REGION_MIN_Y
             val maxY = svc.screenHeight.toFloat()
             node = svc.findClickableInRegion(minX, maxX, minY, maxY, "ImageButton")
                 ?: svc.findClickableInRegion(minX, maxX, minY, maxY, "ImageView")
@@ -261,7 +268,7 @@ object StockAndroidAdapter : VendorAdapter {
         Log.i(TAG, "Found overflow menu – opening, will search for delete option async")
         svc.clickNodeOrTapCenter(overflowNode)
 
-        scheduleDeleteSearch(svc, retriesLeft = 5)
+        scheduleDeleteSearch(svc, retriesLeft = OVERFLOW_POLL_RETRIES)
         return true
     }
 
@@ -280,7 +287,7 @@ object StockAndroidAdapter : VendorAdapter {
             } else {
                 Log.w(TAG, "Overflow menu opened but no delete-like item appeared after retries")
             }
-        }, 200)
+        }, OVERFLOW_POLL_INTERVAL_MS)
     }
 
     private fun getGooglePhotosVersionCode(svc: KrakenAccessibilityService): Long {

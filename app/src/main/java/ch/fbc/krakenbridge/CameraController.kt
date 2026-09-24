@@ -130,8 +130,7 @@ class CameraController(
      */
     fun resumeFromGallery() {
         openCamera()
-        val modeName = if (state.value.isVideoMode) "VIDEO" else "PHOTO"
-        updateNotification("Ready - $modeName mode")
+        updateNotification(state.value.readyMessage)
         Log.i(TAG, "Switched back to CAMERA mode")
         handler.postDelayed({
             swipeToSwitchCameraMode(state.value.isVideoMode)
@@ -167,11 +166,9 @@ class CameraController(
         // If switching away from video mode while recording, release wake lock
         stopRecordingIfActive()
 
-        val toVideo = state
-            .updateAndGet { it.withCameraModeToggled() }
-            .isVideoMode
-        val modeName = if (toVideo) "VIDEO" else "PHOTO"
-        Log.i(TAG, "Fn pressed -> switching to $modeName mode")
+        val toggled = state.updateAndGet { it.withCameraModeToggled() }
+        val toVideo = toggled.isVideoMode
+        Log.i(TAG, "Fn pressed -> switching to ${toggled.captureModeName} mode")
 
         // Open camera first
         openCamera()
@@ -179,7 +176,7 @@ class CameraController(
         // Then swipe to switch mode
         handler.postDelayed({
             swipeToSwitchCameraMode(toVideo)
-            updateNotification("Ready - $modeName mode")
+            updateNotification(toggled.readyMessage)
         }, MODE_SWIPE_DELAY_MS)
     }
 

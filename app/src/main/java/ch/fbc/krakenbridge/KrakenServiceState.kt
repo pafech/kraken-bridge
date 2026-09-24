@@ -26,8 +26,14 @@ enum class ConnectionStatus {
  */
 data class KrakenServiceState(
     val status: ConnectionStatus = ConnectionStatus.Disconnected,
-    /** Human-readable detail for the current [status], e.g. an error cause. */
+    /** Notification text for the current [status]. */
     val message: String = "",
+    /**
+     * What the main screen shows under the status word: an error cause or a
+     * warning. Null when the message only restates the status — the screen
+     * then shows its own guidance for the phase.
+     */
+    val detail: String? = null,
     /** Camera capture mode: false = photo, true = video. */
     val isVideoMode: Boolean = false,
     /** App mode: false = camera, true = gallery/photos review. */
@@ -37,6 +43,12 @@ data class KrakenServiceState(
     /** Whether the camera app has been opened at least once this session. */
     val isCameraOpen: Boolean = false
 ) {
+
+    /** Capture mode as written in logs and the notification. */
+    val captureModeName: String get() = if (isVideoMode) "VIDEO" else "PHOTO"
+
+    /** Notification text while the housing buttons drive the camera. */
+    val readyMessage: String get() = "Ready - $captureModeName mode"
 
     // ── Pure transitions ─────────────────────────────────────────────────────
     // The session's mode/recording state machine, expressed as side-effect-free

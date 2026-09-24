@@ -40,6 +40,18 @@ object SamsungAdapter : VendorAdapter {
     private const val CONFIRM_X = 0.636f   // ≈ 687 / 1080
     private const val CONFIRM_Y = 0.919f   // ≈ 2206 / 2400
 
+    // Mode strip swipe: 28 % of the strip width moves exactly one mode.
+    private const val MODE_SWIPE_FRACTION = 0.28f
+    private const val MODE_SWIPE_DURATION_MS = 250L
+
+    // First-thumbnail tap after opening the gallery grid (≈3 s budget).
+    private const val THUMBNAIL_FIRST_DELAY_MS = 600L
+    private const val THUMBNAIL_POLL_INTERVAL_MS = 200L
+    private const val THUMBNAIL_POLL_ATTEMPTS = 15
+    // The recycler's first node is a 1-px sticky-header sentinel; real
+    // thumbnails are far taller than this.
+    private const val THUMBNAIL_MIN_HEIGHT_PX = 100
+
     override fun handlesPackage(packageName: String): Boolean =
         packageName == PKG_SAMSUNG_CAMERA || packageName == PKG_SAMSUNG_GALLERY
 
@@ -105,7 +117,7 @@ object SamsungAdapter : VendorAdapter {
         val bounds = Rect().also { strip.getBoundsInScreen(it) }
         val midY = (bounds.top + bounds.bottom) / 2f
         val centerX = (bounds.left + bounds.right) / 2f
-        val side = (bounds.right - bounds.left) * 0.28f
+        val side = (bounds.right - bounds.left) * MODE_SWIPE_FRACTION
 
         val (startX, endX) = if (toVideo) {
             // Photo → Video: finger goes left, one item rolls in from the right.
@@ -116,7 +128,7 @@ object SamsungAdapter : VendorAdapter {
         }
 
         Log.i(TAG, "Switching $origin → $target via swipe ($startX,$midY)→($endX,$midY)")
-        svc.dispatchSwipe(startX, midY, endX, midY, durationMs = 250)
+        svc.dispatchSwipe(startX, midY, endX, midY, durationMs = MODE_SWIPE_DURATION_MS)
     }
 
     /**
@@ -174,7 +186,11 @@ object SamsungAdapter : VendorAdapter {
                 // (the just-recorded video item is briefly a placeholder
                 // on the Photo→Gallery transition). Then retry every 200 ms
                 // up to 15 more attempts (≈3 s budget).
-                scheduleFirstThumbnailTap(svc, attemptsLeft = 15, delayMs = 600L)
+                scheduleFirstThumbnailTap(
+                    svc,
+                    attemptsLeft = THUMBNAIL_POLL_ATTEMPTS,
+                    delayMs = THUMBNAIL_FIRST_DELAY_MS
+                )
             }
             true
         } catch (e: ActivityNotFoundException) {
@@ -201,13 +217,13 @@ object SamsungAdapter : VendorAdapter {
     private fun scheduleFirstThumbnailTap(
         svc: KrakenAccessibilityService,
         attemptsLeft: Int,
-        delayMs: Long = 200L
+        delayMs: Long = THUMBNAIL_POLL_INTERVAL_MS
     ) {
         mainHandler.postDelayed({
             val bounds = Rect()
             val thumb = svc.findNodesByResourceId(ID_GALLERY_THUMB).firstOrNull { node ->
                 node.getBoundsInScreen(bounds)
-                bounds.height() > 100
+                bounds.height() > THUMBNAIL_MIN_HEIGHT_PX
             }
             if (thumb != null) {
                 // Samsung Gallery accepts ACTION_CLICK without navigating into

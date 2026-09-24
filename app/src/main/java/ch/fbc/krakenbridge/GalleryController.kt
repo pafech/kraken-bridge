@@ -22,7 +22,7 @@ class GalleryController(
     private val context: Context,
     private val state: MutableStateFlow<KrakenServiceState>,
     private val cameraController: CameraController,
-    private val updateStatus: (ConnectionStatus, String) -> Unit,
+    private val updateStatus: (ConnectionStatus, String, String?) -> Unit,
     private val updateNotification: (String) -> Unit
 ) {
 
@@ -100,7 +100,8 @@ class GalleryController(
 
         if (latest == null && hasPartialMediaAccess(context)) {
             Log.w(TAG, "Partial media access detected — MediaStore returned empty")
-            updateStatus(ConnectionStatus.Ready, "Limited photo access — grant full access in app settings")
+            val warning = "Limited photo access — grant full access in app settings"
+            updateStatus(ConnectionStatus.Ready, warning, warning)
             openAppSettings()
             return
         }
