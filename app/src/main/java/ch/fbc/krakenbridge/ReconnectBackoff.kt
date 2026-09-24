@@ -2,8 +2,9 @@ package ch.fbc.krakenbridge
 
 /**
  * Exponential-backoff schedule for BLE reconnect attempts:
- * 2 s → 4 s → 8 s → 16 s → 32 s, then exhausted (the caller falls back to
- * a fresh scan).
+ * 2 s → 4 s → 8 s → 16 s → 32 s, then exhausted. After that the caller
+ * waits for the housing with a background connection request, renewed at
+ * the 32 s plateau, for as long as the session runs.
  *
  * Pure state machine, no timers — [BleConnectionManager] owns the actual
  * scheduling. Extracted so the retry arithmetic is unit-testable without a

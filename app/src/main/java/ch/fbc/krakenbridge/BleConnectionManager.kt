@@ -24,12 +24,22 @@ import java.util.UUID
  * button notifications, RSSI-based connection monitoring, and reconnect
  * with exponential backoff ([ReconnectBackoff]).
  *
- * Owned by [KrakenBleService]; reports back through [Listener]. GATT and
- * scan callbacks fire on a Binder thread — exactly as they did when this
- * code lived in the service — and listener calls are made from whichever
- * thread the framework used, so the listener must stay thread-safe
- * (status updates go through an atomic StateFlow CAS, button routing was
- * always Binder-threaded).
+ * Owned by [KrakenBleService]; reports back through [Listener].
+ *
+ * Threading: every connection-state decision runs on the main looper
+ * ([handler]). GATT callbacks arrive on a Binder thread and are posted to
+ * it; scan callbacks, the public methods and all scheduled runnables run
+ * there already. One thread means the reconnect flag, the backoff counter
+ * and the health-check loop cannot race. Button notifications are the one
+ * exception: they go straight from the Binder thread to
+ * [Listener.onButtonEvent], so a press never waits behind other work.
+ *
+ * Reconnect never gives up while a session runs: after the fast attempts
+ * of [ReconnectBackoff], the manager keeps a background connection request
+ * (autoConnect) open for the known housing, renewed every
+ * [ReconnectBackoff] plateau, until the housing answers or the user
+ * disconnects. A housing that switched itself off is picked up as soon as
+ * the diver wakes it with a button.
  *
  * MissingPermission is suppressed at class scope: every BLE call here is
  * reachable only after the user has completed the permission walkthrough in
@@ -85,16 +95,17 @@ class BleConnectionManager(
     @Volatile private var isUserDisconnect = false
     @Volatile private var lastConnectedDevice: BluetoothDevice? = null
     private val backoff = ReconnectBackoff()
-    // Guard against onConnectionStateChange and onReadRemoteRssi both firing
-    // for the same disconnect (both run on the BLE binder thread, but each can
-    // call attemptReconnect()). Without this, the backoff double-increments
-    // and the user gets ~half the intended retry budget.
+    // One pending reconnect at a time: a second trigger for the same loss
+    // (e.g. the health check) must not consume another backoff step.
     @Volatile private var reconnectScheduled = false
 
     private val connectionCheckRunnable = object : Runnable {
         override fun run() {
-            checkConnectionHealth()
-            handler.postDelayed(this, HEALTH_CHECK_INTERVAL_MS)
+            // Re-arm only while a link exists — a lost link hands over to
+            // the reconnect logic, and the loop ends here.
+            if (checkConnectionHealth()) {
+                handler.postDelayed(this, HEALTH_CHECK_INTERVAL_MS)
+            }
         }
     }
 
@@ -139,37 +150,11 @@ class BleConnectionManager(
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             Log.d(TAG, "Connection state changed: status=$status, newState=$newState")
-
-            when (newState) {
-                BluetoothProfile.STATE_CONNECTED -> {
-                    Log.i(TAG, "Connected to Kraken")
-                    listener.onStatus(ConnectionStatus.Connected, "Connected to Kraken")
-                    listener.onConnected()
-                    lastConnectedDevice = gatt.device
-                    prefs.saveLastDeviceMac(gatt.device.address)
-                    isUserDisconnect = false
-                    backoff.reset()  // Successful connection resets the retry budget
-                    reconnectScheduled = false
-                    startConnectionMonitoring()
-                    // Discover services after connection; cancel if it takes > 10s
-                    handler.postDelayed(serviceDiscoveryStartRunnable, SERVICE_DISCOVERY_DELAY_MS)
-                }
-                BluetoothProfile.STATE_DISCONNECTED -> {
-                    Log.i(TAG, "Disconnected from Kraken (status=$status, userDisconnect=$isUserDisconnect)")
-                    onLinkLost(gatt)
-                }
-            }
+            handler.post { handleConnectionStateChange(gatt, status, newState) }
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            handler.removeCallbacks(serviceDiscoveryTimeoutRunnable)
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                Log.i(TAG, "Services discovered")
-                enableButtonNotifications(gatt)
-            } else {
-                Log.e(TAG, "Service discovery failed: $status")
-                reportWithDetail(ConnectionStatus.Error, "Service discovery failed")
-            }
+            handler.post { handleServicesDiscovered(gatt, status) }
         }
 
         override fun onCharacteristicChanged(
@@ -197,26 +182,69 @@ class BleConnectionManager(
             descriptor: BluetoothGattDescriptor,
             status: Int
         ) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                Log.i(TAG, "Notifications enabled successfully")
-                listener.onButtonsReady()
-            } else {
-                // CCCD write failed: GATT is still connected but buttons won't fire.
-                // Force disconnect so the standard reconnect path runs — otherwise
-                // the notification keeps saying "Connected" with non-working buttons.
-                Log.e(TAG, "Failed to enable notifications: $status — forcing disconnect to retry")
-                reportWithDetail(ConnectionStatus.Error, "Failed to enable notifications")
-                gatt.disconnect()
-            }
+            handler.post { handleDescriptorWrite(gatt, status) }
         }
 
         override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                Log.d(TAG, "Connection healthy, RSSI: $rssi dBm")
-            } else {
-                Log.w(TAG, "RSSI read failed (status=$status) — treating as connection loss")
+            handler.post { handleRssi(gatt, rssi, status) }
+        }
+    }
+
+    // ── GATT event handling (main looper) ───────────────────────────────────
+
+    private fun handleConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+        when (newState) {
+            BluetoothProfile.STATE_CONNECTED -> {
+                Log.i(TAG, "Connected to Kraken")
+                listener.onStatus(ConnectionStatus.Connected, "Connected to Kraken")
+                listener.onConnected()
+                lastConnectedDevice = gatt.device
+                prefs.saveLastDeviceMac(gatt.device.address)
+                isUserDisconnect = false
+                backoff.reset()  // Successful connection resets the retry budget
+                reconnectScheduled = false
+                startConnectionMonitoring()
+                // Discover services after connection; cancel if it takes > 10s
+                handler.postDelayed(serviceDiscoveryStartRunnable, SERVICE_DISCOVERY_DELAY_MS)
+            }
+            BluetoothProfile.STATE_DISCONNECTED -> {
+                Log.i(TAG, "Disconnected from Kraken (status=$status, userDisconnect=$isUserDisconnect)")
                 onLinkLost(gatt)
             }
+        }
+    }
+
+    private fun handleServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+        handler.removeCallbacks(serviceDiscoveryTimeoutRunnable)
+        if (status == BluetoothGatt.GATT_SUCCESS) {
+            Log.i(TAG, "Services discovered")
+            enableButtonNotifications(gatt)
+        } else {
+            Log.e(TAG, "Service discovery failed: $status")
+            reportWithDetail(ConnectionStatus.Error, "Service discovery failed")
+        }
+    }
+
+    private fun handleDescriptorWrite(gatt: BluetoothGatt, status: Int) {
+        if (status == BluetoothGatt.GATT_SUCCESS) {
+            Log.i(TAG, "Notifications enabled successfully")
+            listener.onButtonsReady()
+        } else {
+            // CCCD write failed: GATT is still connected but buttons won't fire.
+            // Force disconnect so the standard reconnect path runs — otherwise
+            // the notification keeps saying "Connected" with non-working buttons.
+            Log.e(TAG, "Failed to enable notifications: $status — forcing disconnect to retry")
+            reportWithDetail(ConnectionStatus.Error, "Failed to enable notifications")
+            gatt.disconnect()
+        }
+    }
+
+    private fun handleRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
+        if (status == BluetoothGatt.GATT_SUCCESS) {
+            Log.d(TAG, "Connection healthy, RSSI: $rssi dBm")
+        } else {
+            Log.w(TAG, "RSSI read failed (status=$status) — treating as connection loss")
+            onLinkLost(gatt)
         }
     }
 
@@ -321,7 +349,7 @@ class BleConnectionManager(
             isUserDisconnect = false
             backoff.reset()
             reconnectScheduled = false
-            connectToDevice(device)
+            if (!connectToDevice(device)) attemptReconnect()
             true
         } else {
             Log.w(TAG, "No persisted device to reconnect to — scanning")
@@ -362,8 +390,25 @@ class BleConnectionManager(
         scanning = false
     }
 
-    private fun connectToDevice(device: BluetoothDevice) {
+    /** Direct connection attempt; Android gives up after its connect timeout. */
+    private fun connectToDevice(device: BluetoothDevice): Boolean {
         listener.onStatus(ConnectionStatus.Connecting, "Connecting to ${device.address}...")
+        return openGatt(device, autoConnect = false)
+    }
+
+    /**
+     * Background connection request (autoConnect) for the known housing. It
+     * has no timeout: Android connects as soon as the housing advertises
+     * again — e.g. when the diver wakes a housing that switched itself off
+     * by pressing its shutter.
+     */
+    private fun waitForDevice(device: BluetoothDevice): Boolean {
+        reportWithDetail(ConnectionStatus.Reconnecting, "Waiting for the Kraken - press its shutter")
+        return openGatt(device, autoConnect = true)
+    }
+
+    /** Returns false when Android refused to open a GATT client (e.g. Bluetooth off). */
+    private fun openGatt(device: BluetoothDevice, autoConnect: Boolean): Boolean {
         // Deliberate use of the API-37-deprecated overload: the replacement
         // (BluetoothGattConnectionSettings + Executor) requires API 37 at
         // runtime and no available test device runs it, so a gated new path
@@ -372,7 +417,10 @@ class BleConnectionManager(
         // later: the Executor variant moves GATT callbacks off the binder
         // thread — revalidate threading assumptions with real hardware.
         @Suppress("DEPRECATION")
-        bluetoothGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        val gatt = device.connectGatt(context, autoConnect, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        bluetoothGatt = gatt
+        if (gatt == null) Log.e(TAG, "connectGatt returned no client (autoConnect=$autoConnect)")
+        return gatt != null
     }
 
     private fun enableButtonNotifications(gatt: BluetoothGatt) {
@@ -433,14 +481,14 @@ class BleConnectionManager(
         Log.d(TAG, "Connection monitoring stopped")
     }
 
-    private fun checkConnectionHealth() {
+    /** One health check. Returns true while the link exists and the check should repeat. */
+    private fun checkConnectionHealth(): Boolean {
         val gatt = bluetoothGatt
         if (gatt == null) {
             Log.w(TAG, "Connection check: GATT is null, connection lost")
-            stopConnectionMonitoring()  // Stop loop before reconnecting — prevents cascading attempts
             reportWithDetail(ConnectionStatus.Reconnecting, "Connection lost - reconnecting...")
             attemptReconnect()
-            return
+            return false
         }
 
         // Try to read RSSI to verify connection is alive
@@ -455,6 +503,7 @@ class BleConnectionManager(
             // or the disconnect callback picks up the real state.
             Log.e(TAG, "Connection check failed: ${e.message}")
         }
+        return true
     }
 
     private fun attemptReconnect() {
@@ -470,24 +519,31 @@ class BleConnectionManager(
             return
         }
 
-        if (backoff.isExhausted) {
-            Log.w(TAG, "Max reconnect attempts (${ReconnectBackoff.MAX_ATTEMPTS}) reached — falling back to scan")
-            backoff.reset()
-            reportWithDetail(ConnectionStatus.Scanning, "Reconnect failed - scanning for Kraken...")
-            startScan()
-            return
-        }
-
+        // Fast direct attempts first. Once they are used up the session does
+        // not end: a background request waits for the housing, renewed at the
+        // backoff plateau whenever Android drops it. Only a user disconnect
+        // (or a successful connection, which resets the backoff) ends this.
+        val isWaiting = backoff.isExhausted
         val delay = backoff.nextDelayMs()
         reconnectScheduled = true
-        Log.i(TAG, "Reconnect attempt ${backoff.attempts}/${ReconnectBackoff.MAX_ATTEMPTS} in ${delay}ms")
+        if (isWaiting) {
+            Log.i(TAG, "Fast reconnect attempts used up — waiting for the housing in ${delay}ms")
+        } else {
+            Log.i(TAG, "Reconnect attempt ${backoff.attempts}/${ReconnectBackoff.MAX_ATTEMPTS} in ${delay}ms")
+        }
 
         handler.postDelayed({
             reconnectScheduled = false
-            if (bluetoothGatt == null && !isUserDisconnect) {
+            if (bluetoothGatt != null || isUserDisconnect) return@postDelayed
+            val isOpened = if (isWaiting) {
+                waitForDevice(device)
+            } else {
                 listener.onStatus(ConnectionStatus.Reconnecting, "Reconnecting... (attempt ${backoff.attempts})")
                 connectToDevice(device)
             }
+            // No GATT client means no callback will ever arrive — schedule
+            // the next try instead of stalling.
+            if (!isOpened) attemptReconnect()
         }, delay)
     }
 
