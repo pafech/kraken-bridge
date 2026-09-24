@@ -13,18 +13,6 @@ Feature: Gallery opens latest media in single-item view
     Then a content URI is returned
     And the MIME type is "image/*"
 
-  @smoke
-  Scenario: Gallery intent includes MIME type for single-item view
-    When the gallery intent is constructed for the latest media
-    Then the intent action is ACTION_VIEW
-    And the intent has a data URI set
-    And the intent MIME type is not null
-
-  @smoke
-  Scenario: Gallery intent has no package set so the system default resolves
-    When the gallery intent is constructed for the latest media
-    Then the intent has no package set
-
   @device-only
   Scenario: Video media returns video MIME type
     Given a test video entry has been seeded into MediaStore

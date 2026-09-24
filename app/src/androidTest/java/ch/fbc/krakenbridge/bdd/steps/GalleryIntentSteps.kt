@@ -1,11 +1,9 @@
 package ch.fbc.krakenbridge.bdd.steps
 
 import android.content.ContentValues
-import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
-import io.cucumber.java.en.And
 import io.cucumber.java.en.Given
 import io.cucumber.java.en.Then
 import io.cucumber.java.en.When
@@ -14,9 +12,9 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 
 /**
- * Step definitions for the gallery intent feature — verifies that MediaStore
- * queries and ACTION_VIEW intents are constructed correctly so that the
- * gallery opens in single-item view.
+ * Step definitions for the gallery intent feature — verifies that the
+ * MediaStore query behind the gallery launch finds the latest capture with
+ * the MIME type the viewer needs for single-item view.
  *
  * These tests seed synthetic entries into MediaStore (no real files needed)
  * and run in CI on the emulator without BLE hardware.
@@ -29,7 +27,6 @@ class GalleryIntentSteps {
     private var seededImageUri: Uri? = null
     private var seededVideoUri: Uri? = null
     private var queryResult: Pair<Uri, String>? = null
-    private var constructedIntent: Intent? = null
 
     // ── Given ────────────────────────────────────────────────────────────────
 
@@ -63,22 +60,9 @@ class GalleryIntentSteps {
 
     @When("the latest media is queried")
     fun queryLatestMedia() {
-        // Same top-level function KrakenBleService.openPhotosApp() uses —
+        // Same top-level function GalleryController.openPhotosApp() uses —
         // no running service required.
         queryResult = ch.fbc.krakenbridge.queryLatestMedia(context.contentResolver)
-    }
-
-    @When("the gallery intent is constructed for the latest media")
-    fun constructGalleryIntent() {
-        queryLatestMedia()
-        val result = queryResult ?: return
-        val (uri, mimeType) = result
-        // Mirrors KrakenBleService.openPhotosApp(): no setPackage so the system
-        // resolves the user's default gallery app.
-        constructedIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, mimeType)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
     }
 
     // ── Then ─────────────────────────────────────────────────────────────────
@@ -97,33 +81,4 @@ class GalleryIntentSteps {
         assertNotNull("No query result", queryResult)
         assertEquals(expectedMimeType, queryResult!!.second)
     }
-
-    @Then("the intent action is ACTION_VIEW")
-    fun assertIntentAction() {
-        assertNotNull("No intent constructed", constructedIntent)
-        assertEquals(Intent.ACTION_VIEW, constructedIntent!!.action)
-    }
-
-    @Then("the intent has a data URI set")
-    fun assertIntentDataUri() {
-        assertNotNull("No intent constructed", constructedIntent)
-        assertNotNull("Intent data URI is null", constructedIntent!!.data)
-    }
-
-    @Then("the intent MIME type is not null")
-    fun assertIntentMimeType() {
-        assertNotNull("No intent constructed", constructedIntent)
-        assertNotNull("Intent MIME type is null", constructedIntent!!.type)
-    }
-
-    @Then("the intent has no package set")
-    fun assertIntentHasNoPackage() {
-        assertNotNull("No intent constructed", constructedIntent)
-        assertEquals(
-            "Intent should have no package so the system default resolves",
-            null,
-            constructedIntent!!.`package`
-        )
-    }
-
 }

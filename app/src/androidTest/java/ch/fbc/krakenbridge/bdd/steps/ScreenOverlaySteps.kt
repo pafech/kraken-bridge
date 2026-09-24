@@ -91,7 +91,9 @@ class ScreenOverlaySteps {
         check(brightness == 0f) { "Expected dim brightness 0f but was $brightness" }
     }
 
-    @Then("the overlay brightness is back at the bright level")
+    // "(back )" is optional text: one definition serves both "is back at"
+    // (after a wake) and "is at" (held bright during a recording).
+    @Then("the overlay brightness is (back )at the bright level")
     fun assertBright() {
         val overlay = KrakenBleService.instance!!.testOverlayManager!!
         val brightness = overlay.testCurrentBrightness
@@ -108,6 +110,13 @@ class ScreenOverlaySteps {
         // timeout) rather than introspecting the Handler directly.
         Thread.sleep(100)
         assertBright()
+    }
+
+    @When("the shutter button is pressed")
+    fun pressShutter() {
+        val service = KrakenBleService.instance ?: error("Service not running")
+        service.simulateButtonPress(BTN_SHUTTER_PRESS)
+        Thread.sleep(800)
     }
 
     @When("the user disconnects via the Disconnect action")
