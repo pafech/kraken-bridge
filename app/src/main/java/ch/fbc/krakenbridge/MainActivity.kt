@@ -713,14 +713,12 @@ class MainActivity : ComponentActivity() {
             text = {
                 Text(
                     "Kraken Dive Photo uses Android's Accessibility Service to translate " +
-                        "your housing's Bluetooth button presses into taps, swipes, and " +
-                        "system actions for your phone's camera and gallery apps while " +
-                        "you're diving.\n\n" +
+                        "your housing's Bluetooth button presses into taps and swipes in " +
+                        "your phone's camera and gallery apps while you're diving.\n\n" +
                         "If you allow it, the service will be able to:\n" +
                         "• Read on-screen content of the foreground camera or gallery app " +
                         "to locate buttons (shutter, mode switch, delete, swipe targets).\n" +
-                        "• Perform taps, swipes, and system actions (Back, Home) on your " +
-                        "behalf.\n\n" +
+                        "• Perform taps and swipes on your behalf.\n\n" +
                         "What Kraken Dive Photo does NOT do:\n" +
                         "• It does not collect, store, log, or transmit any screen content " +
                         "or personal data. Everything stays on this device.\n" +

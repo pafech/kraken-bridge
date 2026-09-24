@@ -189,20 +189,14 @@ class CameraController(
     }
 
     private fun injectKeyEvent(keyCode: Int) {
-        // Try to use AccessibilityService directly if available
         val accessibilityService = KrakenAccessibilityService.instance
-        if (accessibilityService != null) {
-            Log.d(TAG, "Using AccessibilityService for key injection")
-            accessibilityService.injectKey(keyCode)
-        } else {
-            // Fallback: broadcast intent (service might be running but instance not yet set)
-            Log.d(TAG, "Broadcasting key injection request")
-            val intent = Intent(KrakenAccessibilityService.ACTION_INJECT_KEY).apply {
-                putExtra(KrakenAccessibilityService.EXTRA_KEY_CODE, keyCode)
-                setPackage(context.packageName)
-            }
-            context.sendBroadcast(intent)
+        if (accessibilityService == null) {
+            // Not connected, or no in-app disclosure consent yet — nothing
+            // can act on the camera.
+            Log.w(TAG, "Accessibility service unavailable — key $keyCode not injected")
+            return
         }
+        accessibilityService.injectKey(keyCode)
     }
 
     private fun resolveCameraPackages(): Set<String> {

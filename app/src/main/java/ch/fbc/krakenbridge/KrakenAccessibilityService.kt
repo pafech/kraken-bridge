@@ -1,11 +1,7 @@
 package ch.fbc.krakenbridge
 
 import android.accessibilityservice.AccessibilityService
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -15,7 +11,6 @@ import android.view.KeyEvent
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import androidx.core.content.ContextCompat
 import ch.fbc.krakenbridge.vendor.VendorAdapter
 import ch.fbc.krakenbridge.vendor.VendorRegistry
 
@@ -37,10 +32,6 @@ class KrakenAccessibilityService : AccessibilityService() {
 
     companion object {
         const val TAG = "KrakenA11y"
-
-        // Action to request key injection
-        const val ACTION_INJECT_KEY = "ch.fbc.krakenbridge.INJECT_KEY"
-        const val EXTRA_KEY_CODE = "keyCode"
 
         @Volatile
         private var connected: KrakenAccessibilityService? = null
@@ -84,22 +75,10 @@ class KrakenAccessibilityService : AccessibilityService() {
     internal val currentForegroundPackage: String?
         get() = rootInActiveWindow?.packageName?.toString()
 
-    private val keyReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == ACTION_INJECT_KEY) {
-                val keyCode = intent.getIntExtra(EXTRA_KEY_CODE, -1)
-                if (keyCode != -1) {
-                    handleKeyInjection(keyCode)
-                }
-            }
-        }
-    }
-
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
     override fun onCreate() {
         super.onCreate()
-        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         updateScreenDimensions()
         nodes = AccessibilityNodeFinder(
             root = { rootInActiveWindow },
@@ -108,7 +87,6 @@ class KrakenAccessibilityService : AccessibilityService() {
         )
         gestures = GestureDispatcher(
             service = this,
-            audioManager = audioManager,
             screenWidth = { screenWidth },
             screenHeight = { screenHeight }
         )
@@ -121,16 +99,6 @@ class KrakenAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         connected = this
-
-        // Register receiver for key injection requests. The action is
-        // package-internal (sender uses setPackage(packageName)), so the
-        // receiver must be NOT_EXPORTED. ContextCompat handles the API 33+
-        // flag requirement and the no-op behaviour on older releases.
-        ContextCompat.registerReceiver(
-            this, keyReceiver, IntentFilter(ACTION_INJECT_KEY),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-
         Log.i(TAG, "Accessibility service connected and ready")
     }
 
@@ -155,11 +123,6 @@ class KrakenAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         connected = null
-        try {
-            unregisterReceiver(keyReceiver)
-        } catch (e: IllegalArgumentException) {
-            // Receiver not registered
-        }
         Log.i(TAG, "Accessibility service destroyed")
     }
 
@@ -187,33 +150,15 @@ class KrakenAccessibilityService : AccessibilityService() {
     // ── Key-injection routing ────────────────────────────────────────────────
 
     /**
-     * Entry point for [CameraController] / [GalleryController] key requests
-     * (direct call when the instance is bound, broadcast fallback otherwise).
+     * Entry point for [CameraController]'s camera-button requests. The key
+     * code names the requested action; no key event is sent — each one is
+     * carried out as a gesture in the foreground camera.
      */
     fun injectKey(keyCode: Int) {
-        handleKeyInjection(keyCode)
-    }
-
-    private fun handleKeyInjection(keyCode: Int) {
         Log.d(TAG, "Injecting key: $keyCode")
 
         when (keyCode) {
-            KeyEvent.KEYCODE_BACK -> {
-                performGlobalAction(GLOBAL_ACTION_BACK)
-                Log.i(TAG, "Performed GLOBAL_ACTION_BACK")
-            }
-
-            KeyEvent.KEYCODE_HOME -> {
-                performGlobalAction(GLOBAL_ACTION_HOME)
-                Log.i(TAG, "Performed GLOBAL_ACTION_HOME")
-            }
-
-            KeyEvent.KEYCODE_APP_SWITCH -> {
-                performGlobalAction(GLOBAL_ACTION_RECENTS)
-                Log.i(TAG, "Performed GLOBAL_ACTION_RECENTS")
-            }
-
-            KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_CAMERA -> {
+            KeyEvent.KEYCODE_CAMERA -> {
                 // Use screen tap gesture on shutter button - most reliable method
                 Log.i(TAG, "Shutter requested - tapping shutter button location")
                 currentAdapter().shutterTap(this)
@@ -232,11 +177,6 @@ class KrakenAccessibilityService : AccessibilityService() {
             KeyEvent.KEYCODE_FOCUS -> {
                 Log.i(TAG, "AUTO-FOCUS - tapping center of viewfinder")
                 gestures.focusTap(FocusZone.CENTER)
-            }
-
-            KeyEvent.KEYCODE_MEDIA_RECORD -> {
-                gestures.mediaKey(KeyEvent.KEYCODE_MEDIA_RECORD)
-                Log.i(TAG, "Media record key dispatched")
             }
 
             else -> {

@@ -75,9 +75,9 @@ fun AccessibilityConsentScreen(
 
                 Text(
                     text = "Kraken Dive Photo uses Android's Accessibility Service to " +
-                        "turn your Kraken housing's Bluetooth button presses into taps, " +
-                        "swipes, and system actions for your camera and gallery apps " +
-                        "while the phone is sealed in the housing underwater.",
+                        "turn your Kraken housing's Bluetooth button presses into taps " +
+                        "and swipes in your camera and gallery apps while the phone is " +
+                        "sealed in the housing underwater.",
                     fontSize = 15.sp,
                     lineHeight = 21.sp,
                     color = MaterialTheme.colorScheme.onBackground
@@ -96,7 +96,7 @@ fun AccessibilityConsentScreen(
                     "Read the screen of the active camera or gallery app to find its " +
                         "buttons (shutter, mode, delete, swipe)."
                 )
-                BulletText("Perform taps, swipes, and Back/Home on your behalf.")
+                BulletText("Perform taps and swipes on your behalf.")
 
                 Spacer(modifier = Modifier.height(16.dp))
 

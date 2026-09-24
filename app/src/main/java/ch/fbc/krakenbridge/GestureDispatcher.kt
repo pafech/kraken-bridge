@@ -3,13 +3,11 @@ package ch.fbc.krakenbridge
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
-import android.media.AudioManager
 import android.util.Log
-import android.view.KeyEvent
 
 /**
  * Write-side of the accessibility automation: coordinate taps, swipes,
- * the viewfinder focus-zone maths, and media-key dispatch.
+ * and the viewfinder focus-zone maths.
  *
  * Owned by [KrakenAccessibilityService] — gestures can only be dispatched
  * through a connected AccessibilityService instance, so this class wraps
@@ -18,7 +16,6 @@ import android.view.KeyEvent
  */
 class GestureDispatcher(
     private val service: AccessibilityService,
-    private val audioManager: AudioManager,
     private val screenWidth: () -> Int,
     private val screenHeight: () -> Int
 ) {
@@ -118,15 +115,6 @@ class GestureDispatcher(
 
         Log.i(TAG, "Focus tap at zone $zone: ($x, $y)")
         tap(x, y)
-    }
-
-    /** Dispatch a media-button down/up pair (e.g. KEYCODE_MEDIA_RECORD). */
-    fun mediaKey(keyCode: Int) {
-        val downEvent = KeyEvent(KeyEvent.ACTION_DOWN, keyCode)
-        val upEvent = KeyEvent(KeyEvent.ACTION_UP, keyCode)
-
-        audioManager.dispatchMediaKeyEvent(downEvent)
-        audioManager.dispatchMediaKeyEvent(upEvent)
     }
 
     private companion object {
