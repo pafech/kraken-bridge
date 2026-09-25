@@ -3,6 +3,7 @@ package ch.fbc.krakenbridge.bdd.steps
 import androidx.test.platform.app.InstrumentationRegistry
 import ch.fbc.krakenbridge.KrakenAccessibilityService
 import ch.fbc.krakenbridge.KrakenBleService
+import ch.fbc.krakenbridge.UiHints
 import io.cucumber.java.After
 import io.cucumber.java.Before
 import io.cucumber.java.en.Given
@@ -35,6 +36,11 @@ class CommonSteps {
         shell("settings put secure enabled_accessibility_services " +
                 "ch.fbc.krakenbridge/ch.fbc.krakenbridge.KrakenAccessibilityService")
         shell("settings put secure accessibility_enabled 1")
+        // The service acts only after the in-app disclosure consent
+        // (KrakenAccessibilityService.instance stays null without it), so
+        // these scenarios record it the way the gate's "I agree" does.
+        UiHints(InstrumentationRegistry.getInstrumentation().targetContext)
+            .a11yDisclosureAccepted = true
 
         // Give the system up to 5 s to bind the service
         val deadline = System.currentTimeMillis() + 5_000

@@ -7,7 +7,7 @@ set -euo pipefail
 # emulator boot and nothing else resets it; once the panel sleeps, the
 # foreground activity stops and its accessibility tree empties, so every
 # UiAutomator By.text lookup fails — the UI-driven scenarios go red while
-# service-reflection scenarios still pass (seen as the intermittent
+# service-state scenarios still pass (seen as the intermittent
 # disclosure-gate failures in runs 27012024159 / 27015010287). Pinning
 # after the build left a hole: a cold build takes minutes (2.5 min in run
 # 35915376995, which lost the three disclosure-gate scenarios with

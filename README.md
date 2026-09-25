@@ -37,10 +37,10 @@ Gallery mode opens the most recently captured photo or video directly in single-
 ## Setup
 
 1. Install from Google Play or sideload the APK
-2. Grant permissions when prompted: Bluetooth, Notifications, Photos/Videos (plus Location on Android 11 and older)
-3. Enable the accessibility service: **Settings > Accessibility > Kraken Dive Photo**
-4. Allow display over other apps when prompted (keeps the screen reachable underwater — see below)
-5. Open the app, tap **Connect to Kraken**
+2. Grant permissions when prompted: Bluetooth, Notifications, battery optimization exemption (plus Location on Android 11 and older); Photos/Videos only if you turn on Gallery
+3. Turn on **Camera** in the app's Settings page. It walks through the permissions and, after the in-app disclosure, opens **Settings > Accessibility > Kraken Dive Photo**
+4. Optional but recommended: turn on **Dive Mode** and allow display over other apps (keeps the screen reachable underwater — see below)
+5. Open the main screen and tap the circle to connect
 6. Wait for "Ready" status, then place the phone in the housing
 
 ### Permissions
@@ -50,6 +50,7 @@ Gallery mode opens the most recently captured photo or video directly in single-
 | Bluetooth Scan/Connect | Discover and connect to the Kraken housing |
 | Location (Android 11 and older only) | Required for BLE scanning before Android 12 introduced a dedicated Bluetooth Scan permission. The app does not access your location. |
 | Notifications | Foreground service notification (connection status) |
+| Battery optimization exemption | Keep the BLE connection alive for the whole dive |
 | Photos & Videos | Query MediaStore to open the latest capture in gallery mode |
 | Display over other apps | Keep the screen on without hitting the lockscreen, while dimming to save battery |
 
@@ -57,11 +58,11 @@ On Android 14+, grant **full** photo access ("Allow all") rather than "Select ph
 
 ### Why does Kraken Dive Photo need an accessibility service?
 
-Android provides no public API to trigger the camera shutter or navigate a gallery app from a third-party app. The accessibility service injects tap gestures and key events into the foreground camera/gallery on your behalf — necessary because the phone is sealed inside a dive housing and the touchscreen is inaccessible. No user data is collected, read, or transmitted.
+Android provides no public API to trigger the camera shutter or navigate a gallery app from a third-party app. The accessibility service performs taps and swipes in the foreground camera/gallery on your behalf — necessary because the phone is sealed inside a dive housing and the touchscreen is inaccessible. To find the right button it reads the on-screen controls of that camera or gallery app; nothing is stored or transmitted. It acts only after you agree to the in-app disclosure.
 
 ### Why does Kraken Dive Photo need to display over other apps?
 
-A secure lockscreen (PIN, fingerprint, face unlock) cannot be cleared underwater, and on most modern Android phones it cannot be disabled either (stored credentials, work profiles, OEM policy). The lockscreen only engages after the screen turns off — so while you are connected, the app keeps the screen on with a fully transparent overlay that blocks no touches. After ~45 seconds without input the overlay dims itself to the hardware minimum to save battery. The brightness comes back instantly on any of: a housing button press, a touch on the screen, or pressing the power key. When the diver wakes the screen with a housing button, that first press only restores brightness — it does not take a photo, start a recording, or switch modes. The next press performs the actual action, so a composed shot is never lost to a wake-tap. The idle dimmer is also suspended for the duration of a video recording so the diver can frame longer shots without the screen going dark mid-take. The overlay attaches when you connect and detaches when you disconnect or swipe the app from Recents.
+A secure lockscreen (PIN, fingerprint, face unlock) cannot be cleared underwater, and on most modern Android phones it cannot be disabled either (stored credentials, work profiles, OEM policy). The lockscreen only engages after the screen turns off — so with Dive Mode on, while you are connected, the app keeps the screen on with a fully transparent overlay that blocks no touches. After ~45 seconds without input the overlay dims itself to the hardware minimum to save battery. The brightness comes back instantly on a housing button press, or when the screen turns on again after an unlock. A touch on the screen does not restore it. When the diver wakes the screen with a housing button, that first press only restores brightness — it does not take a photo, start a recording, or switch modes. The next press performs the actual action, so a composed shot is never lost to a wake-tap. The idle dimmer is also suspended for the duration of a video recording so the diver can frame longer shots without the screen going dark mid-take. The overlay attaches when you connect and detaches when you disconnect or swipe the app from Recents.
 
 ## Privacy
 

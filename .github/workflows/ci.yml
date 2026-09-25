@@ -53,7 +53,7 @@ jobs:
 
   # ── Job 0: JVM unit tests ─────────────────────────────────────────────────
   # Pure-logic tests (ReconnectBackoff, ButtonDebouncer, KrakenServiceState
-  # transitions, payload parsing) — seconds, no emulator. Runs in parallel
+  # transitions, Camera setup chain, payload parsing) — seconds, no emulator. Runs in parallel
   # with the build; a red here fails the run and blocks promotion like any
   # other job.
   unit-tests:
@@ -162,8 +162,8 @@ jobs:
   # ── Job 2: BDD instrumented tests on Android emulator ─────────────────────
   #
   # Runs all Cucumber scenarios except those tagged @device-only or @manual.
-  # @device-only scenarios require a real device with Google Camera + Google
-  # Photos installed and are excluded here.
+  # @device-only scenarios need real-device state (Bluetooth toggles, one-shot
+  # permission dialogs, seeded video media) and are excluded here.
   #
   # Uses a debug build because R8 minification (enabled in release) would
   # break instrumentation test discovery and accessibility-tree assertions.

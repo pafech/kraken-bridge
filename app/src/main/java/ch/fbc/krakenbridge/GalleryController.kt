@@ -39,7 +39,7 @@ class GalleryController(
                 Log.i(TAG, "Gallery: previous photo")
             }
             BTN_OK_PRESS -> {
-                // Single press: double-tap trash to delete
+                // Single press: tap trash, then confirm the delete dialog
                 KrakenAccessibilityService.instance?.dispatchQuickDelete()
                 Log.i(TAG, "Gallery: delete triggered")
             }

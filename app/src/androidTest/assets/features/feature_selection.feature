@@ -14,7 +14,7 @@ Feature: Feature toggles drive permissions and button mapping
   Scenario: Fresh install lands on Settings until permissions are granted
     When the user opens the app
     Then the Settings page is shown as the initial pager page
-    And the Camera card is marked Required and locked on
+    And the Camera card is marked Required, switched off and tappable
     And Gallery and Dive Mode toggles are off by default
     And every Camera permission row appears under the Camera card
 
@@ -53,7 +53,6 @@ Feature: Feature toggles drive permissions and button mapping
     When the user toggles Gallery on
     Then the system Photos & Videos permission dialog appears
     And on Allow the Gallery toggle stays on
-    And the Photos & Videos row turns green under the Gallery card
 
   Scenario: Denying the Gallery permission reverts the toggle
     Given the user is on the Settings page

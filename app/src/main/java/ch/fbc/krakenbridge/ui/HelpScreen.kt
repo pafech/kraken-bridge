@@ -52,7 +52,7 @@ fun HelpScreen(features: Features) {
             HelpRow("Plus (+)", "Next photo/video")
             HelpRow("Minus (-)", "Previous photo/video")
             HelpRow("OK", "Delete photo/video")
-            HelpRow("Back / Fn / Shutter", "Return to Camera")
+            HelpRow("Back / Shutter", "Return to Camera")
         }
     }
 }

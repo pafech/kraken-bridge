@@ -128,7 +128,8 @@ dependencies {
 
     // ── JVM unit tests ───────────────────────────────────────────────────────
     // Pure-logic tests (ReconnectBackoff, ButtonDebouncer, state transitions,
-    // payload parsing) — no emulator, run by the unit-tests CI job.
+    // Camera setup chain, payload parsing) — no emulator, run by the
+    // unit-tests CI job.
     testImplementation("junit:junit:4.13.2")
 
     // ── Instrumented / BDD tests ─────────────────────────────────────────────
@@ -141,6 +142,6 @@ dependencies {
     // context and uiAutomation handle.
     androidTestImplementation("androidx.test:runner:1.7.0")
 
-    // UIAutomator — cross-app interaction (Google Camera, Google Photos).
+    // UIAutomator — drives the in-app disclosure gate in the BDD scenarios.
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.0")
 }

@@ -28,17 +28,17 @@ screen** so both options are visible without scrolling, and the
 | Requirement (Play policy) | How we satisfy it | Where |
 |---|---|---|
 | Disclosure is **in-app**, shown during normal use without menu navigation | Full-screen gate at first launch | `MainActivity` gate block; `ui/AccessibilityConsentScreen.kt` |
-| Disclosure appears **right before requesting** the capability | In-flow dialog before opening system Accessibility settings | `MainActivity.AccessibilityDisclosureDialog` |
-| States **why** the capability is needed | "What Kraken Dive Photo does" section | `AccessibilityConsentScreen.kt` |
-| States **what** data is accessed and **how** it is used / shared | Bullet list of what the service reads/does + "does NOT do" section (no collection, no transmission) | `AccessibilityConsentScreen.kt` |
+| Disclosure appears **right before requesting** the capability | In-flow dialog before opening system Accessibility settings | `ui/AccessibilityDisclosureDialog.kt` |
+| States **why** the capability is needed | Opening paragraph of both surfaces (button presses → taps and swipes while the phone is sealed in the housing) | `ui/AccessibilityConsentScreen.kt`, `ui/AccessibilityDisclosureDialog.kt` |
+| States **what** data is accessed and **how** it is used / shared | "If you agree, it will:" and "It will not:" lists on the gate ("…does NOT do" in the dialog): reads the foreground camera/gallery controls; no collection, no transmission | `ui/AccessibilityConsentScreen.kt`, `ui/AccessibilityDisclosureDialog.kt` |
 | **Two clear options**, one affirmative, one to decline | `ConsentActionButtons` — two equally-sized **filled** buttons, "I agree" / "Decline" | `ui/ConsentActionButtons.kt` |
 | Negative option is **clearly visible** (not a ghost/text-only control) | Both buttons filled, equal weight; decline is a solid light-fill button, accept a solid aqua button | `ui/ConsentActionButtons.kt` |
 | Both options visible **without scrolling** (above the fold) | Disclosure text condensed so the full gate — text and both buttons — fits one screen on a typical phone | `ui/AccessibilityConsentScreen.kt` |
-| **Affirmative action** required; navigating away ≠ consent | Gate: back press leaves the app and is not treated as consent. Dialog: `dismissOnBackPress = false`, `dismissOnClickOutside = false`, and `onDismissRequest` routes to *declined* | `AccessibilityConsentScreen.kt`, `MainActivity.AccessibilityDisclosureDialog` |
+| **Affirmative action** required; navigating away ≠ consent | Gate: back press leaves the app and is not treated as consent. Dialog: `dismissOnBackPress = false`, `dismissOnClickOutside = false`, and `onDismissRequest` routes to *declined* | `AccessibilityConsentScreen.kt`, `ui/AccessibilityDisclosureDialog.kt` |
 | **No auto-dismiss / expiry** | Neither surface uses a timer | both |
 | **Graceful degradation** on decline (no coercive consent wall) | Declining the gate does **not** close the app; it stays usable with the service off, and the disclosure re-appears next launch / when the user tries to enable the service | `MainActivity` (`a11yDisclosureDismissedThisSession`) |
 | Consent recorded only on affirmative action | `a11yDisclosureAccepted` persisted on "I agree" in **both** surfaces | `MainActivity`, `Features.kt` (`UiHints`) |
-| Service **acts only after consent**, however it was enabled | If the service is enabled directly in Android Settings without in-app consent, `KrakenAccessibilityService.instance` stays null and touch events are not forwarded, so the service does nothing. It stays enabled (no `disableSelf()`), so agreeing in the app takes effect at once | `KrakenAccessibilityService.kt` (`instance`, `hasDisclosureConsent`) |
+| Service **acts only after consent**, however it was enabled | If the service is enabled directly in Android Settings without in-app consent, `KrakenAccessibilityService.instance` stays null, so the service does nothing. It stays enabled (no `disableSelf()`), so agreeing in the app takes effect at once | `KrakenAccessibilityService.kt` (`instance`, `hasDisclosureConsent`) |
 
 Behaviour is locked by BDD: `app/src/androidTest/assets/features/accessibility_disclosure.feature`.
 
@@ -55,7 +55,7 @@ in order:
    (the service is simply off) — i.e. declining is a real, non-coercive choice.
 4. **Re-trigger:** reach the disclosure again (relaunch the app, or tap the
    in-app Accessibility row) to show it can be brought back after declining.
-5. **Consent path:** tap **I agree**, then enable the Kraken Bridge service in
+5. **Consent path:** tap **I agree**, then enable the Kraken Dive Photo service in
    the system Accessibility settings.
 6. **Core feature in action:** with the service enabled, a Kraken housing button
    press drives the camera/gallery (add a caption/voice-over, since the BLE

@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
 // Chevron pointing right — used on the right edge handle when the user is
-// on the leftmost (Help) page and the only thing the handle does is take
+// on the leftmost (Settings) page and the only thing the handle does is take
 // them back toward Main. A chevron reads as "direction" without competing
 // with the destination's primary glyph.
 internal val ChevronRightIcon: ImageVector by lazy {
@@ -29,7 +29,7 @@ internal val ChevronRightIcon: ImageVector by lazy {
 }
 
 // Mirror of ChevronRightIcon — used on the left edge handle when on the
-// rightmost (Settings) page.
+// rightmost (Help) page.
 internal val ChevronLeftIcon: ImageVector by lazy {
     ImageVector.Builder(
         defaultWidth = 24.dp, defaultHeight = 24.dp,
