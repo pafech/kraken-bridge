@@ -109,17 +109,11 @@ class KrakenAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // We don't otherwise consume events here, but TOUCH_INTERACTION_START
-        // is the only reliable system-wide signal that the diver is poking
-        // the touchscreen. Forward it to the BLE service so the screen overlay
-        // can come back to full brightness — without this the diver gets
-        // stuck on a near-black screen the moment the idle dimmer kicked in
-        // and they tried to interact via touch instead of housing buttons.
-        if (event?.eventType == AccessibilityEvent.TYPE_TOUCH_INTERACTION_START &&
-            hasDisclosureConsent()
-        ) {
-            KrakenBleService.instance?.notifyUserActivity()
-        }
+        // No events are consumed: the service reads the window tree on demand
+        // when a housing button asks for an action. (A touch-wake path via
+        // TYPE_TOUCH_INTERACTION_START never worked — that event needs touch
+        // exploration mode, which would turn every tap into a select-then-
+        // double-tap interaction in the camera. Removed 2026-09-25.)
     }
 
     override fun onInterrupt() {

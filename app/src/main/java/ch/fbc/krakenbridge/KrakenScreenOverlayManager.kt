@@ -35,9 +35,10 @@ import android.view.WindowManager
  *     power: BRIGHTNESS_OVERRIDE_NONE (-1) follows the user's preferred
  *     brightness; 0f drops the backlight to its hardware minimum (on OLED
  *     this is effectively black at near-zero power).
- *   - Housing buttons go through [consumeWakeIfDim]; touches and system
- *     user-presence broadcasts call [onUserActivity]. Both restore
- *     brightness immediately and reset the idle timer.
+ *   - Housing buttons go through [consumeWakeIfDim]; system user-presence
+ *     broadcasts (screen on, unlock) call [onUserActivity]. Both restore
+ *     brightness immediately and reset the idle timer. A touch on the
+ *     screen does not — no public signal reports it without blocking it.
  *
  * Lifecycle:
  *   Owned by [KrakenBleService]. Started with the session (ACTION_CONNECT
@@ -255,7 +256,7 @@ class KrakenScreenOverlayManager(private val context: Context) {
         private const val TAG = "KrakenOverlay"
 
         /**
-         * Default time of BLE / touch / system silence before the overlay
+         * Default time of housing-button / system silence before the overlay
          * dims itself. Long enough to frame a shot, observe the subject,
          * and time the shutter without the screen going dark mid-wait.
          */
