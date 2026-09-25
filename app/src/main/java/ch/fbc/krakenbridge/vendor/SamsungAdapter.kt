@@ -44,7 +44,7 @@ object SamsungAdapter : VendorAdapter {
     private const val MODE_SWIPE_FRACTION = 0.28f
     private const val MODE_SWIPE_DURATION_MS = 250L
 
-    // First-thumbnail tap after opening the gallery grid (≈3 s budget).
+    // First-thumbnail tap after opening the gallery grid (≈3.4 s budget).
     private const val THUMBNAIL_FIRST_DELAY_MS = 600L
     private const val THUMBNAIL_POLL_INTERVAL_MS = 200L
     private const val THUMBNAIL_POLL_ATTEMPTS = 15
@@ -184,8 +184,8 @@ object SamsungAdapter : VendorAdapter {
                 // Initial 600 ms gives the grid time to lay out and the
                 // newly-saved capture time to settle as a real thumbnail
                 // (the just-recorded video item is briefly a placeholder
-                // on the Photo→Gallery transition). Then retry every 200 ms
-                // up to 15 more attempts (≈3 s budget).
+                // on the Photo→Gallery transition). Then retry every 200 ms,
+                // 15 attempts in total (≈3.4 s budget).
                 scheduleFirstThumbnailTap(
                     svc,
                     attemptsLeft = THUMBNAIL_POLL_ATTEMPTS,

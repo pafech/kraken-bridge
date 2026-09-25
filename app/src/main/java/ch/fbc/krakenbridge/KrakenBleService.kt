@@ -263,7 +263,7 @@ class KrakenBleService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     /**
-     * User swiped the app out of Recents (or used Force Stop). Treat this as
+     * User swiped the app out of Recents. Treat this as
      * an explicit "App geschlossen" — same semantics as the Disconnect button:
      * clear persisted MAC, release BLE/wake locks, stop the foreground service.
      * No auto-reconnect, no boot-restart.

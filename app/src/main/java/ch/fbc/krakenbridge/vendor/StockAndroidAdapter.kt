@@ -250,8 +250,8 @@ object StockAndroidAdapter : VendorAdapter {
      * The delete item only appears after the dropdown animates in (~300–500 ms
      * on Photos ≥ 6.90), so we poll every 200 ms for up to 5 retries instead
      * of blocking the accessibility main thread with Thread.sleep. Blocking
-     * here would stall TYPE_TOUCH_INTERACTION_START forwarding for the same
-     * duration, leaving the overlay stuck dim if the diver tries to touch.
+     * here would stall every other gesture and tree read of the service for
+     * the same duration.
      */
     private fun openOverflowMenuAndScheduleDelete(svc: KrakenAccessibilityService): Boolean {
         val overflowNode = svc.findNodeByContentDescription("More options", exactMatch = false)

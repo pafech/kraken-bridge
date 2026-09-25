@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.test.platform.app.InstrumentationRegistry
 import ch.fbc.krakenbridge.BTN_FN_PRESS
 import ch.fbc.krakenbridge.BTN_SHUTTER_PRESS
+import ch.fbc.krakenbridge.FeatureRepository
 import ch.fbc.krakenbridge.KrakenBleService
 import io.cucumber.java.en.Given
 import io.cucumber.java.en.Then
@@ -12,11 +13,9 @@ import io.cucumber.java.en.When
 /**
  * Steps for screen_overlay.feature.
  *
- * All scenarios in that feature are tagged @manual: they exercise the
- * SYSTEM_ALERT_WINDOW overlay, which depends on a special permission the
- * emulator cannot grant non-interactively. The step definitions below are
- * still useful when running scenarios on a maintainer device with the
- * permission already granted, and they document the contract.
+ * All scenarios in that feature are tagged @manual: they are run by hand on
+ * a maintainer device with the SYSTEM_ALERT_WINDOW permission granted, and
+ * they document the overlay contract.
  */
 class ScreenOverlaySteps {
 
@@ -28,6 +27,14 @@ class ScreenOverlaySteps {
         check(android.provider.Settings.canDrawOverlays(context)) {
             "SYSTEM_ALERT_WINDOW not granted — grant it via Settings before running"
         }
+    }
+
+    @Given("Dive Mode is enabled")
+    fun enableDiveMode() {
+        // The service attaches the overlay only with Dive Mode on, and reads
+        // the feature set on every start.
+        val repo = FeatureRepository(context)
+        repo.save(repo.load().copy(diveMode = true))
     }
 
     @When("the BLE service is started with ACTION_CONNECT")

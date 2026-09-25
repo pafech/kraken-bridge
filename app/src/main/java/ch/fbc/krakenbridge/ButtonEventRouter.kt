@@ -78,7 +78,7 @@ class ButtonEventRouter(
         // Window in which a repeat of the same code counts as a duplicate
         private const val DEBOUNCE_MS = 100L
 
-        // Buttons whose handler injects a tap or key event into the camera's
+        // Buttons whose handler dispatches a tap into the camera's
         // accessibility tree. They require the camera to be the foreground
         // app; otherwise the dispatch lands in some other window and looks
         // like nothing happened to the diver.

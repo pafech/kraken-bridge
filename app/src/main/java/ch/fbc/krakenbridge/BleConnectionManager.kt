@@ -36,9 +36,9 @@ import java.util.UUID
  *
  * Reconnect never gives up while a session runs: after the fast attempts
  * of [ReconnectBackoff], the manager keeps a background connection request
- * (autoConnect) open for the known housing, renewed every
- * [ReconnectBackoff] plateau, until the housing answers or the user
- * disconnects. A housing that switched itself off is picked up as soon as
+ * (autoConnect) open for the known housing — opened again 32 s after
+ * Android drops it, and at once when Bluetooth comes back on — until the
+ * housing answers or the user disconnects. A housing that switched itself off is picked up as soon as
  * the diver wakes it with a button.
  *
  * MissingPermission is suppressed at class scope: every BLE call here is

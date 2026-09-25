@@ -38,7 +38,7 @@ Gallery mode opens the most recently captured photo or video directly in single-
 
 1. Install from Google Play or sideload the APK
 2. Grant permissions when prompted: Bluetooth, Notifications, battery optimization exemption (plus Location on Android 11 and older); Photos/Videos only if you turn on Gallery
-3. Turn on **Camera** in the app's Settings page. It walks through the permissions and, after the in-app disclosure, opens **Settings > Accessibility > Kraken Dive Photo**
+3. Turn on **Camera** in the app's Settings page. It walks through the permissions and, after the in-app disclosure, opens Android's Accessibility settings — turn on **Kraken Dive Photo** there
 4. Optional but recommended: turn on **Dive Mode** and allow display over other apps (keeps the screen reachable underwater — see below)
 5. Open the main screen and tap the circle to connect
 6. Wait for "Ready" status, then place the phone in the housing

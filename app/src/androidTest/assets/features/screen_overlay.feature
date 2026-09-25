@@ -5,7 +5,8 @@ Feature: Screen overlay keeps the dive accessible without a lockscreen
   So that I never get blocked by a secure keyguard I cannot enter underwater
 
   Background:
-    Given the Kraken Bridge accessibility service is running
+    Given Dive Mode is enabled
+    And the Kraken Bridge accessibility service is running
     And the BLE service is connected and in photo mode
 
   @manual
