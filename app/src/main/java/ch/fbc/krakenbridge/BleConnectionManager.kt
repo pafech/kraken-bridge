@@ -95,9 +95,20 @@ class BleConnectionManager(
     @Volatile private var isUserDisconnect = false
     @Volatile private var lastConnectedDevice: BluetoothDevice? = null
     private val backoff = ReconnectBackoff()
-    // One pending reconnect at a time: a second trigger for the same loss
-    // (e.g. the health check) must not consume another backoff step.
-    @Volatile private var reconnectScheduled = false
+    // The one scheduled reconnect, if any: a second trigger for the same
+    // loss (e.g. the health check) must not consume another backoff step,
+    // and Bluetooth coming back on cancels it to reconnect at once.
+    private var pendingReconnect: Runnable? = null
+
+    // True between STATE_CONNECTED and the teardown of that link. A GATT
+    // client that exists while this is false is a pending connect request.
+    private var isLinkUp = false
+
+    // Health checks in a row whose RSSI request Android refused. A single
+    // refusal is normal (another GATT operation is running); several in a
+    // row mean the client is dead — e.g. Bluetooth was switched off, which
+    // on Android 17 delivers no DISCONNECTED callback at all.
+    private var refusedRssiReads = 0
 
     private val connectionCheckRunnable = object : Runnable {
         override fun run() {
@@ -201,8 +212,9 @@ class BleConnectionManager(
                 lastConnectedDevice = gatt.device
                 prefs.saveLastDeviceMac(gatt.device.address)
                 isUserDisconnect = false
+                isLinkUp = true
                 backoff.reset()  // Successful connection resets the retry budget
-                reconnectScheduled = false
+                cancelPendingReconnect()
                 startConnectionMonitoring()
                 // Discover services after connection; cancel if it takes > 10s
                 handler.postDelayed(serviceDiscoveryStartRunnable, SERVICE_DISCOVERY_DELAY_MS)
@@ -271,6 +283,7 @@ class BleConnectionManager(
         listener.onDisconnected()
         gatt.close()
         bluetoothGatt = null
+        isLinkUp = false
 
         if (isUserDisconnect) {
             // User requested disconnect
@@ -348,7 +361,7 @@ class BleConnectionManager(
             Log.i(TAG, "Reconnecting to persisted device: ${device.address}")
             isUserDisconnect = false
             backoff.reset()
-            reconnectScheduled = false
+            cancelPendingReconnect()
             if (!connectToDevice(device)) attemptReconnect()
             true
         } else {
@@ -374,7 +387,7 @@ class BleConnectionManager(
      * OOM-kill — and as the BLE part of [userDisconnect].
      */
     fun release() {
-        reconnectScheduled = false
+        cancelPendingReconnect()
         stopScan()
         stopConnectionMonitoring()
         bluetoothGatt?.let {
@@ -382,6 +395,30 @@ class BleConnectionManager(
             it.close()
         }
         bluetoothGatt = null
+        isLinkUp = false
+    }
+
+    /**
+     * Bluetooth came back on (system broadcast, main thread). A connect
+     * request opened before the adapter went off is dead and will never
+     * deliver a callback, so it is replaced by a fresh one. A live link is
+     * left alone.
+     */
+    fun onBluetoothTurnedOn() {
+        if (isUserDisconnect || isLinkUp || lastConnectedDevice == null) return
+        Log.i(TAG, "Bluetooth on again — reconnecting now")
+        bluetoothGatt?.close()
+        bluetoothGatt = null
+        // Attempts made while Bluetooth was off were refused and used up the
+        // fast schedule; start it again instead of waiting out a long delay.
+        cancelPendingReconnect()
+        backoff.reset()
+        attemptReconnect()
+    }
+
+    private fun cancelPendingReconnect() {
+        pendingReconnect?.let { handler.removeCallbacks(it) }
+        pendingReconnect = null
     }
 
     private fun stopScan() {
@@ -409,6 +446,11 @@ class BleConnectionManager(
 
     /** Returns false when Android refused to open a GATT client (e.g. Bluetooth off). */
     private fun openGatt(device: BluetoothDevice, autoConnect: Boolean): Boolean {
+        if (bluetoothAdapter?.isEnabled != true) {
+            // A client opened now would be dead once Bluetooth is back on.
+            Log.w(TAG, "Bluetooth is off — no connect request opened")
+            return false
+        }
         // Deliberate use of the API-37-deprecated overload: the replacement
         // (BluetoothGattConnectionSettings + Executor) requires API 37 at
         // runtime and no available test device runs it, so a gated new path
@@ -472,6 +514,7 @@ class BleConnectionManager(
 
     private fun startConnectionMonitoring() {
         handler.removeCallbacks(connectionCheckRunnable)
+        refusedRssiReads = 0
         handler.postDelayed(connectionCheckRunnable, HEALTH_CHECK_INTERVAL_MS)
         Log.d(TAG, "Connection monitoring started")
     }
@@ -492,22 +535,30 @@ class BleConnectionManager(
         }
 
         // Try to read RSSI to verify connection is alive
-        try {
-            val success = gatt.readRemoteRssi()
-            if (!success) {
-                Log.w(TAG, "Connection check: Failed to read RSSI")
-            }
+        val isAccepted = try {
+            gatt.readRemoteRssi()
         } catch (e: Exception) {
             // Deliberately broad: the periodic health check must never crash
-            // the dive session. Whatever the stack throws here, the next check
-            // or the disconnect callback picks up the real state.
+            // the dive session — a throwing stack counts as a refusal.
             Log.e(TAG, "Connection check failed: ${e.message}")
+            false
         }
-        return true
+        if (isAccepted) {
+            refusedRssiReads = 0
+            return true
+        }
+
+        refusedRssiReads++
+        Log.w(TAG, "Connection check: RSSI request refused ($refusedRssiReads/$MAX_REFUSED_RSSI_READS)")
+        if (refusedRssiReads < MAX_REFUSED_RSSI_READS) return true
+
+        Log.w(TAG, "GATT client unresponsive — treating as connection loss")
+        onLinkLost(gatt)
+        return false
     }
 
     private fun attemptReconnect() {
-        if (reconnectScheduled) {
+        if (pendingReconnect != null) {
             Log.d(TAG, "Reconnect already scheduled — ignoring redundant trigger")
             return
         }
@@ -525,16 +576,15 @@ class BleConnectionManager(
         // (or a successful connection, which resets the backoff) ends this.
         val isWaiting = backoff.isExhausted
         val delay = backoff.nextDelayMs()
-        reconnectScheduled = true
         if (isWaiting) {
             Log.i(TAG, "Fast reconnect attempts used up — waiting for the housing in ${delay}ms")
         } else {
             Log.i(TAG, "Reconnect attempt ${backoff.attempts}/${ReconnectBackoff.MAX_ATTEMPTS} in ${delay}ms")
         }
 
-        handler.postDelayed({
-            reconnectScheduled = false
-            if (bluetoothGatt != null || isUserDisconnect) return@postDelayed
+        val task = Runnable {
+            pendingReconnect = null
+            if (bluetoothGatt != null || isUserDisconnect) return@Runnable
             val isOpened = if (isWaiting) {
                 waitForDevice(device)
             } else {
@@ -544,12 +594,18 @@ class BleConnectionManager(
             // No GATT client means no callback will ever arrive — schedule
             // the next try instead of stalling.
             if (!isOpened) attemptReconnect()
-        }, delay)
+        }
+        pendingReconnect = task
+        handler.postDelayed(task, delay)
     }
 
     companion object {
         // RSSI read cadence that detects a silently dropped link.
         private const val HEALTH_CHECK_INTERVAL_MS = 5_000L
+
+        // Refused RSSI requests in a row (one per health check, so 15 s)
+        // after which the link counts as lost.
+        private const val MAX_REFUSED_RSSI_READS = 3
 
         // Grace before discoverServices() — some stacks reject an early call —
         // and the limit after which a stuck discovery forces a reconnect.

@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.bluetooth.BluetoothAdapter
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -95,11 +96,18 @@ class KrakenBleService : Service() {
     // FLAG_KEEP_SCREEN_ON normally suppresses while we are connected, but
     // it's a useful safety net during the brief windows between connect /
     // disconnect when the overlay isn't attached.
+    //
+    // BluetoothAdapter STATE_ON goes to the connection manager: a connect
+    // request opened before Bluetooth went off is dead and must be renewed.
     private val screenStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 Intent.ACTION_SCREEN_ON,
                 Intent.ACTION_USER_PRESENT -> notifyUserActivity()
+                BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                    val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                    if (state == BluetoothAdapter.STATE_ON) connectionManager.onBluetoothTurnedOn()
+                }
             }
         }
     }
@@ -169,6 +177,7 @@ class KrakenBleService : Service() {
         val screenFilter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
         }
         ContextCompat.registerReceiver(
             this, screenStateReceiver, screenFilter, ContextCompat.RECEIVER_NOT_EXPORTED
@@ -345,8 +354,7 @@ class KrakenBleService : Service() {
             startActivity(intent)
         } catch (e: Exception) {
             // Deliberately broad: a failed wake attempt must never take the
-            // dive session down with it — the camera key path still wakes
-            // most ROMs, so we log and carry on.
+            // dive session down with it — log and carry on.
             Log.e(TAG, "wakeScreen: failed to launch wake activity: ${e.message}")
         }
     }
@@ -403,10 +411,9 @@ class KrakenBleService : Service() {
     // ────────────────────────────────────────────────────────────────────────
 
     /**
-     * Forwarded from [KrakenAccessibilityService] when the diver touches the
-     * screen, and from [screenStateReceiver] when the system surfaces a
-     * user-presence event. Restores the overlay's brightness so the diver
-     * never gets stuck on a dimmed screen.
+     * Called from [screenStateReceiver] when the system surfaces a
+     * user-presence event (screen on, unlock). Restores the overlay's
+     * brightness so the diver never gets stuck on a dimmed screen.
      */
     fun notifyUserActivity() {
         if (::overlayManager.isInitialized) overlayManager.onUserActivity()
