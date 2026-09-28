@@ -1,0 +1,66 @@
+# One-time recovery of the release signing material. GitHub secrets are
+# write-only, and no other copy of the passwords exists. The job encrypts the
+# material to the owner's age public key, so the artifact and the log hold
+# ciphertext only. Delete this workflow, its runs and the artifact after use.
+name: Export signing material (one-time)
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipient:
+        description: "age public key (age1…) that may decrypt the export"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate recipient
+        env:
+          RECIPIENT: ${{ inputs.recipient }}
+        run: |
+          if [[ ! "$RECIPIENT" =~ ^age1[0-9a-z]{58}$ ]]; then
+            echo "::error::recipient is not an age X25519 public key"
+            exit 1
+          fi
+
+      - name: Install age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+
+      # Plaintext exists only in a 0700 temp dir for the length of this step,
+      # and nothing is echoed.
+      - name: Encrypt signing material
+        env:
+          RECIPIENT: ${{ inputs.recipient }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # A missing secret arrives as an empty string; fail instead of
+          # exporting an empty value.
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::secret $name is empty"
+              exit 1
+            fi
+          done
+          umask 077
+          plain="$(mktemp -d)"
+          trap 'rm -rf "$plain"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$plain/kraken-release.jks"
+          printf 'KEYSTORE_PASSWORD=%s\nKEY_ALIAS=%s\nKEY_PASSWORD=%s\n' \
+            "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > "$plain/credentials.env"
+          tar -C "$plain" -cf - . | age -r "$RECIPIENT" -o "$RUNNER_TEMP/signing-export.tar.age"
+
+      - name: Upload encrypted export
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signing-export
+          path: ${{ runner.temp }}/signing-export.tar.age
+          retention-days: 1
+          if-no-files-found: error
