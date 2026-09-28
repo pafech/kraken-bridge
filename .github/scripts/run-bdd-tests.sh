@@ -18,6 +18,13 @@ adb shell svc power stayon true
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
 
+# Suppress crash and ANR dialogs, BEFORE the build. The 2-core emulator
+# starves while Gradle runs next to it, and the Pixel Launcher can hit an
+# ANR. Its "isn't responding" dialog is owned by `android` and stays on top
+# of everything, so MainActivity starts behind it and every disclosure-gate
+# lookup fails with foreground=android (screenshot in run 36404139889).
+adb shell settings put global hide_error_dialogs 1
+
 ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
 
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -32,6 +39,10 @@ sleep 2
 # Belt and braces: wake again in case the panel slept anyway.
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
+# Keep what happened during boot and build before clearing: an ANR like
+# the launcher one above happens here and is gone from the suite's own log.
+mkdir -p bdd-reports
+adb logcat -d > bdd-reports/logcat-before-suite.txt || true
 # Start the suite with an empty log so the logcat artifact below covers
 # exactly this run.
 adb logcat -c || true
@@ -50,7 +61,6 @@ adb shell dumpsys power | grep -E "mWakefulness=" || true
 # here, and unlike an on-device XML file it survives the emulator teardown
 # that android-emulator-runner performs as soon as this script exits
 # (which is why a post-step `adb pull` always found nothing).
-mkdir -p bdd-reports
 
 set +e
 
