@@ -28,6 +28,8 @@ The shutter button opens whichever camera app the system launches via `android.m
 
 Gallery mode opens the most recently captured photo or video directly in single-item view — designed for divers reviewing shots during safety stops.
 
+For installation outside the Play Store, each tagged release on GitHub carries a signed APK for sideloading.
+
 ## Requirements
 
 - Android 8.0+ (API 26)
