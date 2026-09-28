@@ -53,6 +53,28 @@ adb shell dumpsys power | grep -E "mWakefulness=" || true
 mkdir -p bdd-reports
 
 set +e
+
+# Focus sampler. The disclosure-gate flake reports foreground=android while
+# logcat shows MainActivity displayed and no crash dialog or ANR, so the
+# covering window is unknown. Record the focused window every 2 s during the
+# suite, plus a screenshot whenever focus moves to a window outside the app
+# (capped at 20), so the next red run shows what covered the gate.
+sample_focus() {
+  local last="" shots=0 focus
+  while true; do
+    focus=$(adb shell dumpsys window 2>/dev/null | grep -m1 'mCurrentFocus=' | tr -d '\r' | sed -E 's/^ +//' || true)
+    echo "$(date -u +%H:%M:%S) $focus" >> bdd-reports/focus.log
+    if [[ "$focus" != "$last" && "$focus" != *ch.fbc.krakenbridge* && $shots -lt 20 ]]; then
+      shots=$((shots + 1))
+      adb exec-out screencap -p > "bdd-reports/focus-$(date -u +%H%M%S).png" 2>/dev/null || true
+    fi
+    last=$focus
+    sleep 2
+  done
+}
+sample_focus &
+SAMPLER_PID=$!
+
 # `optionsAnnotationPackage` tells cucumber-android where to find the
 # @CucumberOptions class (CucumberRunner lives in `ch.fbc.krakenbridge.bdd`,
 # not the testApplicationId package `ch.fbc.krakenbridge.test`). The Gradle
@@ -67,6 +89,8 @@ adb shell "am instrument -w \
 # `$?` after a pipe is the exit code of the last pipe member (tee), which
 # always succeeds. PIPESTATUS[0] is what we actually care about.
 INSTRUMENT_EXIT=${PIPESTATUS[0]}
+kill "$SAMPLER_PID" 2>/dev/null || true
+wait "$SAMPLER_PID" 2>/dev/null
 set -e
 
 # Always capture the device log next to the instrumentation output —
