@@ -67,16 +67,33 @@ jobs:
           echo "VERSION_CODE=$(( ${{ github.run_number }} + 100 ))" >> $GITHUB_ENV
 
       # ------------------------------------------------------------------ #
-      # Signing — requires four repository secrets:                          #
+      # Signing — requires four repository secrets. The keystore and its    #
+      # passwords are kept in the owner's password vault; GitHub secrets    #
+      # cannot be read back.                                                 #
       #   KEYSTORE_BASE64   base64-encoded .jks file                         #
-      #     encode with:  base64 -w 0 kraken-release.jks                    #
+      #     encode with:  base64 -i kraken-release.jks                      #
       #   KEYSTORE_PASSWORD  keystore password                               #
       #   KEY_ALIAS          key alias inside the keystore                   #
       #   KEY_PASSWORD       key password                                    #
+      # Unlike ci.yml, a release never builds unsigned: a missing secret     #
+      # stops the job here.                                                  #
       # ------------------------------------------------------------------ #
       - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          # A missing secret arrives as an empty string and only fails minutes
+          # later inside Gradle with an unrelated keystore error. Fail here.
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::secret $name is not set"
+              exit 1
+            fi
+          done
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
 
       # Build both the APK (for GitHub Releases / sideloading) and the AAB
       # (Android App Bundle, required by Google Play Store).
