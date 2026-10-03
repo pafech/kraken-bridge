@@ -34,8 +34,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -78,9 +78,11 @@ fun MainScreen(
         // anchor — so phase changes and message length cannot drift the
         // circle off centre.
         //
-        // Offsets math (HeroCircle box is 260dp tall, chip 52dp, status 120dp):
+        // Offsets math (HeroCircle box is 260dp tall, chip 52dp, status 148dp):
         //   chip row centre   = -130 (top of HeroCircle) - 20 (gap) - 26 (chip half) = -176dp
-        //   status box centre = +130 (bottom of HeroCircle) + 28 (gap) + 60 (box half) = +218dp
+        //   status box centre = +130 (bottom of HeroCircle) + 28 (gap) + 74 (box half) = +232dp
+        // The status box fits the status word, the battery line and three
+        // lines of sub-info.
         Row(
             modifier = Modifier
                 .align(Alignment.Center)
@@ -100,9 +102,6 @@ fun MainScreen(
                 contentDescription = if (airplaneModeOn) "Airplane mode on" else "Airplane mode off",
                 onClick = onToggleAirplaneMode
             )
-            if (phase == ConnectionPhase.Ready && batteryPercent != null) {
-                BatteryChip(percent = batteryPercent)
-            }
         }
 
         HeroCircle(
@@ -122,9 +121,9 @@ fun MainScreen(
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .offset(y = 218.dp)
+                .offset(y = 232.dp)
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(148.dp)
                 .padding(horizontal = 24.dp),
             contentAlignment = Alignment.TopCenter
         ) {
@@ -135,6 +134,10 @@ fun MainScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
+                if (phase == ConnectionPhase.Ready && batteryPercent != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    BatteryLine(percent = batteryPercent)
+                }
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = subInfo(phase, detail, cameraReady),
@@ -352,19 +355,17 @@ private fun StatusChip(
     }
 }
 
-// Housing battery, read once per connection. Informational only (no click):
-// amber below LOW_BATTERY_PERCENT as a "charge before the dive" hint.
+// Housing battery, read once per connection — part of the housing state, so
+// it sits under the status word rather than with the phone-state chips.
+// Amber below LOW_BATTERY_PERCENT as a "charge before the dive" hint.
 @Composable
-private fun BatteryChip(percent: Int) {
+private fun BatteryLine(percent: Int) {
     val tint = if (percent < LOW_BATTERY_PERCENT) KrakenAmber else KrakenGreen
     val icon = remember(percent) { batteryIcon(percent) }
     Row(
-        modifier = Modifier
-            .height(52.dp)
-            .clip(CircleShape)
-            .background(tint.copy(alpha = 0.18f))
-            .border(width = 1.dp, color = tint.copy(alpha = 0.55f), shape = CircleShape)
-            .padding(horizontal = 14.dp),
+        modifier = Modifier.clearAndSetSemantics {
+            contentDescription = "Housing battery $percent percent"
+        },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
@@ -372,14 +373,13 @@ private fun BatteryChip(percent: Int) {
             imageVector = icon,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(26.dp)
+            modifier = Modifier.size(22.dp)
         )
         Text(
             text = "$percent%",
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
-            color = tint,
-            modifier = Modifier.semantics { contentDescription = "Housing battery $percent percent" }
+            color = tint
         )
     }
 }
@@ -401,10 +401,10 @@ private fun batteryIcon(percent: Int): ImageVector =
         }
         path(fill = SolidColor(Color.White)) {
             // Terminal cap
-            moveTo(20.4f, 10f)
-            horizontalLineTo(22f)
+            moveTo(20f, 10f)
+            horizontalLineTo(21.6f)
             verticalLineTo(14f)
-            horizontalLineTo(20.4f)
+            horizontalLineTo(20f)
             close()
         }
         val fillWidth = 13.6f * percent.coerceIn(0, 100) / 100f

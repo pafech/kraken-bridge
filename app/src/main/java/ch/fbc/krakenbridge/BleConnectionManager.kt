@@ -138,14 +138,6 @@ class BleConnectionManager(
         gatt.discoverServices()
     }
 
-    // Battery reads refused so far on this link. A refusal means another
-    // GATT operation (e.g. the RSSI health check) is in flight — retry later.
-    private var refusedBatteryReads = 0
-
-    private val batteryReadRunnable = Runnable {
-        bluetoothGatt?.let { readBatteryLevel(it) }
-    }
-
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
@@ -275,7 +267,6 @@ class BleConnectionManager(
         if (status == BluetoothGatt.GATT_SUCCESS) {
             Log.i(TAG, "Notifications enabled successfully")
             listener.onButtonsReady()
-            refusedBatteryReads = 0
             readBatteryLevel(gatt)
         } else {
             // CCCD write failed: GATT is still connected but buttons won't fire.
@@ -316,13 +307,12 @@ class BleConnectionManager(
             Log.i(TAG, "No battery service; housing offers: ${gatt.services.map { it.uuid }}")
             return
         }
-        val isAccepted = gatt.readCharacteristic(characteristic)
-        if (isAccepted) return
-        refusedBatteryReads++
-        if (refusedBatteryReads < MAX_REFUSED_BATTERY_READS) {
-            handler.postDelayed(batteryReadRunnable, BATTERY_READ_RETRY_MS)
-        } else {
-            Log.w(TAG, "Battery level read refused $refusedBatteryReads times — giving up")
+        // Called right after the CCCD write completed, so no other
+        // characteristic/descriptor operation is outstanding (RSSI reads do
+        // not count) and the request is accepted. A refusal costs only the
+        // level display — no retry.
+        if (!gatt.readCharacteristic(characteristic)) {
+            Log.w(TAG, "Battery level read refused")
         }
     }
 
@@ -354,7 +344,6 @@ class BleConnectionManager(
 
         handler.removeCallbacks(serviceDiscoveryStartRunnable)
         handler.removeCallbacks(serviceDiscoveryTimeoutRunnable)
-        handler.removeCallbacks(batteryReadRunnable)
         stopConnectionMonitoring()
         listener.onDisconnected()
         gatt.close()
@@ -464,7 +453,6 @@ class BleConnectionManager(
      */
     fun release() {
         cancelPendingReconnect()
-        handler.removeCallbacks(batteryReadRunnable)
         stopScan()
         stopConnectionMonitoring()
         bluetoothGatt?.let {
@@ -574,6 +562,7 @@ class BleConnectionManager(
         } else {
             Log.w(TAG, "CCCD descriptor not found, notifications may not work")
             reportWithDetail(ConnectionStatus.Ready, "Connected (no CCCD)")
+            readBatteryLevel(gatt)
         }
     }
 
@@ -702,10 +691,6 @@ class BleConnectionManager(
         // Standard Battery Service / Battery Level characteristic
         private val BATTERY_SERVICE_UUID: UUID = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
         private val BATTERY_LEVEL_UUID: UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
-
-        // A refused battery read is retried after this delay, a few times.
-        private const val BATTERY_READ_RETRY_MS = 1_000L
-        private const val MAX_REFUSED_BATTERY_READS = 3
 
         // Client Characteristic Configuration Descriptor (for enabling notifications)
         private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
