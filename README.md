@@ -49,7 +49,7 @@ Emergency releases are tagged via [github.com/pafech/kraken-bridge/releases/new]
 5. Open the main screen and tap the circle to connect
 6. Wait for "Ready" status, then place the phone in the housing
 
-Once connected, the main screen shows the housing's battery level under the connection status (amber below 30 %). It is refreshed every minute while connected (right after the housing is switched on it may briefly show 100 %, until the housing has measured its battery) and only appears if the housing reports it via the standard BLE Battery Service.
+Once connected, the main screen shows the housing's battery level under the connection status (amber below 30 %). It is read on connect and updated as soon as the housing reports a new value (right after the housing is switched on it may briefly show 100 %, until the housing has measured its battery) and only appears if the housing reports it via the standard BLE Battery Service.
 
 ### Permissions
 
