@@ -50,6 +50,7 @@ fun MainScreen(
     status: ConnectionStatus,
     detail: String?,
     batteryPercent: Int?,
+    isBatteryPending: Boolean,
     bluetoothEnabled: Boolean,
     airplaneModeOn: Boolean,
     cameraReady: Boolean,
@@ -134,7 +135,7 @@ fun MainScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
-                if (phase == ConnectionPhase.Ready && batteryPercent != null) {
+                if (phase == ConnectionPhase.Ready && (batteryPercent != null || isBatteryPending)) {
                     Spacer(modifier = Modifier.height(4.dp))
                     BatteryLine(percent = batteryPercent)
                 }
@@ -358,13 +359,23 @@ private fun StatusChip(
 // Housing battery, read once per connection — part of the housing state, so
 // it sits under the status word rather than with the phone-state chips.
 // Amber below LOW_BATTERY_PERCENT as a "charge before the dive" hint.
+// A null [percent] is the pending state: an empty, muted outline and "–– %"
+// at the same size, so nothing shifts when the value arrives.
 @Composable
-private fun BatteryLine(percent: Int) {
-    val tint = if (percent < LOW_BATTERY_PERCENT) KrakenAmber else KrakenGreen
-    val icon = remember(percent) { batteryIcon(percent) }
+private fun BatteryLine(percent: Int?) {
+    val tint = when {
+        percent == null -> OceanTextMuted.copy(alpha = 0.6f)
+        percent < LOW_BATTERY_PERCENT -> KrakenAmber
+        else -> KrakenGreen
+    }
+    val icon = remember(percent) { batteryIcon(percent ?: 0) }
     Row(
         modifier = Modifier.clearAndSetSemantics {
-            contentDescription = "Housing battery $percent percent"
+            contentDescription = if (percent == null) {
+                "Housing battery level pending"
+            } else {
+                "Housing battery $percent percent"
+            }
         },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -376,7 +387,7 @@ private fun BatteryLine(percent: Int) {
             modifier = Modifier.size(22.dp)
         )
         Text(
-            text = "$percent%",
+            text = if (percent == null) "–– %" else "$percent%",
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
             color = tint

@@ -122,7 +122,7 @@ class KrakenBleService : Service() {
         override fun onDisconnected() {
             wakeLocks.releaseConnection()
             // A level from a lost link may be stale by the next connection.
-            mutableState.update { it.copy(batteryPercent = null) }
+            mutableState.update { it.copy(batteryPercent = null, isBatteryPending = false) }
         }
 
         override fun onButtonsReady() =
@@ -131,7 +131,10 @@ class KrakenBleService : Service() {
         override fun onButtonEvent(code: Int) = buttonRouter.route(code)
 
         override fun onBatteryLevel(percent: Int) =
-            mutableState.update { it.copy(batteryPercent = percent) }
+            mutableState.update { it.copy(batteryPercent = percent, isBatteryPending = false) }
+
+        override fun onBatteryPending(isPending: Boolean) =
+            mutableState.update { it.copy(isBatteryPending = isPending) }
     }
 
     override fun onCreate() {

@@ -85,6 +85,9 @@ class BleConnectionManager(
 
         /** Housing battery level (0–100 %), read once per connection (re-read once if 100 %). */
         fun onBatteryLevel(percent: Int)
+
+        /** A battery re-read is scheduled (true) or ended without a value (false). */
+        fun onBatteryPending(isPending: Boolean)
     }
 
     private val context: Context = context.applicationContext
@@ -142,7 +145,8 @@ class BleConnectionManager(
     private var isBatteryRecheck = false
 
     private val batteryRecheckRunnable = Runnable {
-        bluetoothGatt?.let { readBatteryLevel(it) }
+        val gatt = bluetoothGatt
+        if (gatt == null || !readBatteryLevel(gatt)) listener.onBatteryPending(false)
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -296,6 +300,7 @@ class BleConnectionManager(
         val percent = batteryPercentFrom(value)
         if (status != BluetoothGatt.GATT_SUCCESS || percent == null) {
             Log.w(TAG, "Battery level read failed (status=$status)")
+            if (isBatteryRecheck) listener.onBatteryPending(false)
             return
         }
         Log.i(TAG, "Housing battery: $percent%")
@@ -306,6 +311,7 @@ class BleConnectionManager(
             // again; the second value is shown whatever it is, so a genuinely
             // full battery appears after the delay.
             isBatteryRecheck = true
+            listener.onBatteryPending(true)
             handler.postDelayed(batteryRecheckRunnable, BATTERY_RECHECK_DELAY_MS)
             return
         }
@@ -314,20 +320,20 @@ class BleConnectionManager(
 
     /**
      * Read the standard Battery Service. A housing without the service
-     * simply shows no level.
+     * simply shows no level. Returns false when no read was started.
      */
-    private fun readBatteryLevel(gatt: BluetoothGatt) {
+    private fun readBatteryLevel(gatt: BluetoothGatt): Boolean {
         val characteristic = gatt.getService(BATTERY_SERVICE_UUID)
             ?.getCharacteristic(BATTERY_LEVEL_UUID)
         if (characteristic == null) {
             Log.i(TAG, "No battery service; housing offers: ${gatt.services.map { it.uuid }}")
-            return
+            return false
         }
         // No other characteristic/descriptor operation is outstanding here
         // (RSSI reads do not count). A refusal costs only the level display.
-        if (!gatt.readCharacteristic(characteristic)) {
-            Log.w(TAG, "Battery level read refused")
-        }
+        val isAccepted = gatt.readCharacteristic(characteristic)
+        if (!isAccepted) Log.w(TAG, "Battery level read refused")
+        return isAccepted
     }
 
     /** First battery read of a link; resets the placeholder re-check. */

@@ -286,6 +286,7 @@ class MainActivity : ComponentActivity() {
                         status = serviceState.status,
                         detail = serviceState.detail,
                         batteryPercent = serviceState.batteryPercent,
+                        isBatteryPending = serviceState.isBatteryPending,
                         bluetoothEnabled = bluetoothAdapterEnabled,
                         airplaneModeOn = airplaneModeOn,
                         cameraReady = cameraGrants().isReady,

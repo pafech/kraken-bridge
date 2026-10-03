@@ -92,7 +92,7 @@ class KrakenServiceStateTest {
     fun `session release keeps the capture mode for a sticky restart`() {
         val video = KrakenServiceState(
             isVideoMode = true, isGalleryMode = true, isRecording = true, isCameraOpen = true,
-            batteryPercent = 80
+            batteryPercent = 80, isBatteryPending = true
         )
         val released = video.sessionReleased()
         assertTrue("capture mode survives teardown", released.isVideoMode)
@@ -100,5 +100,6 @@ class KrakenServiceStateTest {
         assertFalse(released.isRecording)
         assertFalse(released.isCameraOpen)
         assertNull(released.batteryPercent)
+        assertFalse(released.isBatteryPending)
     }
 }

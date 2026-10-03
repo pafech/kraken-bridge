@@ -43,7 +43,12 @@ data class KrakenServiceState(
     /** Whether the camera app has been opened at least once this session. */
     val isCameraOpen: Boolean = false,
     /** Housing battery level in percent; null when unknown or not connected. */
-    val batteryPercent: Int? = null
+    val batteryPercent: Int? = null,
+    /**
+     * A battery value is on its way (the first read was the housing's
+     * post-boot placeholder); the main screen shows a neutral "–– %".
+     */
+    val isBatteryPending: Boolean = false
 ) {
 
     /** Capture mode as written in logs and the notification. */
@@ -97,6 +102,7 @@ data class KrakenServiceState(
         isGalleryMode = false,
         isRecording = false,
         isCameraOpen = false,
-        batteryPercent = null
+        batteryPercent = null,
+        isBatteryPending = false
     )
 }
