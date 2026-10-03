@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -47,6 +49,7 @@ private enum class ConnectionPhase { Idle, Busy, Ready }
 fun MainScreen(
     status: ConnectionStatus,
     detail: String?,
+    batteryPercent: Int?,
     bluetoothEnabled: Boolean,
     airplaneModeOn: Boolean,
     cameraReady: Boolean,
@@ -97,6 +100,9 @@ fun MainScreen(
                 contentDescription = if (airplaneModeOn) "Airplane mode on" else "Airplane mode off",
                 onClick = onToggleAirplaneMode
             )
+            if (phase == ConnectionPhase.Ready && batteryPercent != null) {
+                BatteryChip(percent = batteryPercent)
+            }
         }
 
         HeroCircle(
@@ -345,6 +351,73 @@ private fun StatusChip(
         )
     }
 }
+
+// Housing battery, read once per connection. Informational only (no click):
+// amber below LOW_BATTERY_PERCENT as a "charge before the dive" hint.
+@Composable
+private fun BatteryChip(percent: Int) {
+    val tint = if (percent < LOW_BATTERY_PERCENT) KrakenAmber else KrakenGreen
+    val icon = remember(percent) { batteryIcon(percent) }
+    Row(
+        modifier = Modifier
+            .height(52.dp)
+            .clip(CircleShape)
+            .background(tint.copy(alpha = 0.18f))
+            .border(width = 1.dp, color = tint.copy(alpha = 0.55f), shape = CircleShape)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(26.dp)
+        )
+        Text(
+            text = "$percent%",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = tint,
+            modifier = Modifier.semantics { contentDescription = "Housing battery $percent percent" }
+        )
+    }
+}
+
+private const val LOW_BATTERY_PERCENT = 30
+
+// Horizontal battery outline with a fill bar proportional to [percent].
+private fun batteryIcon(percent: Int): ImageVector =
+    ImageVector.Builder(
+        defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f
+    ).apply {
+        path(stroke = SolidColor(Color.White), strokeLineWidth = 1.6f) {
+            moveTo(2.8f, 7.8f)
+            horizontalLineTo(19.2f)
+            verticalLineTo(16.2f)
+            horizontalLineTo(2.8f)
+            close()
+        }
+        path(fill = SolidColor(Color.White)) {
+            // Terminal cap
+            moveTo(20.4f, 10f)
+            horizontalLineTo(22f)
+            verticalLineTo(14f)
+            horizontalLineTo(20.4f)
+            close()
+        }
+        val fillWidth = 13.6f * percent.coerceIn(0, 100) / 100f
+        if (fillWidth > 0f) {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(4.2f, 9.2f)
+                horizontalLineTo(4.2f + fillWidth)
+                verticalLineTo(14.8f)
+                horizontalLineTo(4.2f)
+                close()
+            }
+        }
+    }.build()
 
 // Inline Bluetooth icon — keeps us off material-icons-extended (4+ MB).
 private val BluetoothIcon: ImageVector by lazy {

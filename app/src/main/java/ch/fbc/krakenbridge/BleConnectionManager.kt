@@ -82,6 +82,9 @@ class BleConnectionManager(
 
         /** A housing button notification arrived (Binder thread). */
         fun onButtonEvent(code: Int)
+
+        /** Housing battery level (0–100 %), read once per connection. */
+        fun onBatteryLevel(percent: Int)
     }
 
     private val context: Context = context.applicationContext
@@ -133,6 +136,14 @@ class BleConnectionManager(
         val gatt = bluetoothGatt ?: return@Runnable
         handler.postDelayed(serviceDiscoveryTimeoutRunnable, SERVICE_DISCOVERY_TIMEOUT_MS)
         gatt.discoverServices()
+    }
+
+    // Battery reads refused so far on this link. A refusal means another
+    // GATT operation (e.g. the RSSI health check) is in flight — retry later.
+    private var refusedBatteryReads = 0
+
+    private val batteryReadRunnable = Runnable {
+        bluetoothGatt?.let { readBatteryLevel(it) }
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -196,6 +207,29 @@ class BleConnectionManager(
             handler.post { handleDescriptorWrite(gatt, status) }
         }
 
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray,
+            status: Int
+        ) {
+            handler.post { handleCharacteristicRead(gatt, characteristic, value, status) }
+        }
+
+        // Legacy callback for API < 33, same reason as onCharacteristicChanged.
+        // The value is copied here, on the Binder thread, before the stack
+        // can reuse the characteristic for another operation.
+        @Deprecated("Deprecated in Java")
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int
+        ) {
+            val value = characteristic.value?.copyOf()
+            handler.post { handleCharacteristicRead(gatt, characteristic, value, status) }
+        }
+
         override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
             handler.post { handleRssi(gatt, rssi, status) }
         }
@@ -241,6 +275,8 @@ class BleConnectionManager(
         if (status == BluetoothGatt.GATT_SUCCESS) {
             Log.i(TAG, "Notifications enabled successfully")
             listener.onButtonsReady()
+            refusedBatteryReads = 0
+            readBatteryLevel(gatt)
         } else {
             // CCCD write failed: GATT is still connected but buttons won't fire.
             // Force disconnect so the standard reconnect path runs — otherwise
@@ -248,6 +284,45 @@ class BleConnectionManager(
             Log.e(TAG, "Failed to enable notifications: $status — forcing disconnect to retry")
             reportWithDetail(ConnectionStatus.Error, "Failed to enable notifications")
             gatt.disconnect()
+        }
+    }
+
+    private fun handleCharacteristicRead(
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+        value: ByteArray?,
+        status: Int
+    ) {
+        // A late read from a GATT we no longer own must not set the level.
+        if (gatt !== bluetoothGatt || characteristic.uuid != BATTERY_LEVEL_UUID) return
+        val percent = batteryPercentFrom(value)
+        if (status != BluetoothGatt.GATT_SUCCESS || percent == null) {
+            Log.w(TAG, "Battery level read failed (status=$status)")
+            return
+        }
+        Log.i(TAG, "Housing battery: $percent%")
+        listener.onBatteryLevel(percent)
+    }
+
+    /**
+     * One read of the standard Battery Service. The housing battery lasts
+     * several dives, so a value per connection is enough — no notifications,
+     * no polling. A housing without the service simply shows no level.
+     */
+    private fun readBatteryLevel(gatt: BluetoothGatt) {
+        val characteristic = gatt.getService(BATTERY_SERVICE_UUID)
+            ?.getCharacteristic(BATTERY_LEVEL_UUID)
+        if (characteristic == null) {
+            Log.i(TAG, "No battery service; housing offers: ${gatt.services.map { it.uuid }}")
+            return
+        }
+        val isAccepted = gatt.readCharacteristic(characteristic)
+        if (isAccepted) return
+        refusedBatteryReads++
+        if (refusedBatteryReads < MAX_REFUSED_BATTERY_READS) {
+            handler.postDelayed(batteryReadRunnable, BATTERY_READ_RETRY_MS)
+        } else {
+            Log.w(TAG, "Battery level read refused $refusedBatteryReads times — giving up")
         }
     }
 
@@ -279,6 +354,7 @@ class BleConnectionManager(
 
         handler.removeCallbacks(serviceDiscoveryStartRunnable)
         handler.removeCallbacks(serviceDiscoveryTimeoutRunnable)
+        handler.removeCallbacks(batteryReadRunnable)
         stopConnectionMonitoring()
         listener.onDisconnected()
         gatt.close()
@@ -388,6 +464,7 @@ class BleConnectionManager(
      */
     fun release() {
         cancelPendingReconnect()
+        handler.removeCallbacks(batteryReadRunnable)
         stopScan()
         stopConnectionMonitoring()
         bluetoothGatt?.let {
@@ -621,6 +698,14 @@ class BleConnectionManager(
         // Nordic LED Button Service
         private val BUTTON_SERVICE_UUID: UUID = UUID.fromString("00001523-1212-efde-1523-785feabcd123")
         private val BUTTON_CHAR_UUID: UUID = UUID.fromString("00001524-1212-efde-1523-785feabcd123")
+
+        // Standard Battery Service / Battery Level characteristic
+        private val BATTERY_SERVICE_UUID: UUID = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
+        private val BATTERY_LEVEL_UUID: UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
+
+        // A refused battery read is retried after this delay, a few times.
+        private const val BATTERY_READ_RETRY_MS = 1_000L
+        private const val MAX_REFUSED_BATTERY_READS = 3
 
         // Client Characteristic Configuration Descriptor (for enabling notifications)
         private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")

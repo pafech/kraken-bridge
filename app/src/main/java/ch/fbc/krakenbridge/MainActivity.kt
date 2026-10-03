@@ -285,6 +285,7 @@ class MainActivity : ComponentActivity() {
                     Page.Main -> MainScreen(
                         status = serviceState.status,
                         detail = serviceState.detail,
+                        batteryPercent = serviceState.batteryPercent,
                         bluetoothEnabled = bluetoothAdapterEnabled,
                         airplaneModeOn = airplaneModeOn,
                         cameraReady = cameraGrants().isReady,
