@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -47,6 +49,8 @@ private enum class ConnectionPhase { Idle, Busy, Ready }
 fun MainScreen(
     status: ConnectionStatus,
     detail: String?,
+    batteryPercent: Int?,
+    isBatteryPending: Boolean,
     bluetoothEnabled: Boolean,
     airplaneModeOn: Boolean,
     cameraReady: Boolean,
@@ -75,9 +79,11 @@ fun MainScreen(
         // anchor — so phase changes and message length cannot drift the
         // circle off centre.
         //
-        // Offsets math (HeroCircle box is 260dp tall, chip 52dp, status 120dp):
+        // Offsets math (HeroCircle box is 260dp tall, chip 52dp, status 148dp):
         //   chip row centre   = -130 (top of HeroCircle) - 20 (gap) - 26 (chip half) = -176dp
-        //   status box centre = +130 (bottom of HeroCircle) + 28 (gap) + 60 (box half) = +218dp
+        //   status box centre = +130 (bottom of HeroCircle) + 28 (gap) + 74 (box half) = +232dp
+        // The status box fits the status word, the battery line and three
+        // lines of sub-info.
         Row(
             modifier = Modifier
                 .align(Alignment.Center)
@@ -116,9 +122,9 @@ fun MainScreen(
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .offset(y = 218.dp)
+                .offset(y = 232.dp)
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(148.dp)
                 .padding(horizontal = 24.dp),
             contentAlignment = Alignment.TopCenter
         ) {
@@ -129,6 +135,10 @@ fun MainScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
+                if (phase == ConnectionPhase.Ready && (batteryPercent != null || isBatteryPending)) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    BatteryLine(percent = batteryPercent)
+                }
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = subInfo(phase, detail, cameraReady),
@@ -345,6 +355,80 @@ private fun StatusChip(
         )
     }
 }
+
+// Housing battery, read once per connection — part of the housing state, so
+// it sits under the status word rather than with the phone-state chips.
+// Amber below LOW_BATTERY_PERCENT as a "charge before the dive" hint.
+// A null [percent] is the pending state: an empty, muted outline and "–– %"
+// at the same size, so nothing shifts when the value arrives.
+@Composable
+private fun BatteryLine(percent: Int?) {
+    val tint = when {
+        percent == null -> OceanTextMuted.copy(alpha = 0.6f)
+        percent < LOW_BATTERY_PERCENT -> KrakenAmber
+        else -> KrakenGreen
+    }
+    val icon = remember(percent) { batteryIcon(percent ?: 0) }
+    Row(
+        modifier = Modifier.clearAndSetSemantics {
+            contentDescription = if (percent == null) {
+                "Housing battery level pending"
+            } else {
+                "Housing battery $percent percent"
+            }
+        },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(22.dp)
+        )
+        Text(
+            text = if (percent == null) "–– %" else "$percent%",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = tint
+        )
+    }
+}
+
+private const val LOW_BATTERY_PERCENT = 30
+
+// Horizontal battery outline with a fill bar proportional to [percent].
+private fun batteryIcon(percent: Int): ImageVector =
+    ImageVector.Builder(
+        defaultWidth = 24.dp, defaultHeight = 24.dp,
+        viewportWidth = 24f, viewportHeight = 24f
+    ).apply {
+        path(stroke = SolidColor(Color.White), strokeLineWidth = 1.6f) {
+            moveTo(2.8f, 7.8f)
+            horizontalLineTo(19.2f)
+            verticalLineTo(16.2f)
+            horizontalLineTo(2.8f)
+            close()
+        }
+        path(fill = SolidColor(Color.White)) {
+            // Terminal cap
+            moveTo(20f, 10f)
+            horizontalLineTo(21.6f)
+            verticalLineTo(14f)
+            horizontalLineTo(20f)
+            close()
+        }
+        val fillWidth = 13.6f * percent.coerceIn(0, 100) / 100f
+        if (fillWidth > 0f) {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(4.2f, 9.2f)
+                horizontalLineTo(4.2f + fillWidth)
+                verticalLineTo(14.8f)
+                horizontalLineTo(4.2f)
+                close()
+            }
+        }
+    }.build()
 
 // Inline Bluetooth icon — keeps us off material-icons-extended (4+ MB).
 private val BluetoothIcon: ImageVector by lazy {

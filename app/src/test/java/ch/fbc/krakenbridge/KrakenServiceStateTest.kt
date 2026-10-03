@@ -2,6 +2,7 @@ package ch.fbc.krakenbridge
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -90,12 +91,15 @@ class KrakenServiceStateTest {
     @Test
     fun `session release keeps the capture mode for a sticky restart`() {
         val video = KrakenServiceState(
-            isVideoMode = true, isGalleryMode = true, isRecording = true, isCameraOpen = true
+            isVideoMode = true, isGalleryMode = true, isRecording = true, isCameraOpen = true,
+            batteryPercent = 80, isBatteryPending = true
         )
         val released = video.sessionReleased()
         assertTrue("capture mode survives teardown", released.isVideoMode)
         assertFalse(released.isGalleryMode)
         assertFalse(released.isRecording)
         assertFalse(released.isCameraOpen)
+        assertNull(released.batteryPercent)
+        assertFalse(released.isBatteryPending)
     }
 }
