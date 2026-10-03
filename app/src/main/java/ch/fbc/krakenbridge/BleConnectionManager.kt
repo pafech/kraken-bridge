@@ -724,7 +724,7 @@ class BleConnectionManager(
         // The value the housing reports before its first measurement, and
         // how long after such a read the level is read again.
         private const val PLACEHOLDER_BATTERY_PERCENT = 100
-        private const val BATTERY_RECHECK_DELAY_MS = 5_000L
+        private const val BATTERY_RECHECK_DELAY_MS = 4_000L
 
         // Client Characteristic Configuration Descriptor (for enabling notifications)
         private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
