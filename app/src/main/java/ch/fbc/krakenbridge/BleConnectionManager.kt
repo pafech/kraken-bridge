@@ -83,7 +83,7 @@ class BleConnectionManager(
         /** A housing button notification arrived (Binder thread). */
         fun onButtonEvent(code: Int)
 
-        /** Housing battery level (0–100 %), read once per connection. */
+        /** Housing battery level (0–100 %), read on connect and every minute. */
         fun onBatteryLevel(percent: Int)
     }
 
@@ -136,6 +136,17 @@ class BleConnectionManager(
         val gatt = bluetoothGatt ?: return@Runnable
         handler.postDelayed(serviceDiscoveryTimeoutRunnable, SERVICE_DISCOVERY_TIMEOUT_MS)
         gatt.discoverServices()
+    }
+
+    // Battery level refresh while the link is up. Re-arms only while the
+    // housing has a Battery Service.
+    private val batteryRefreshRunnable = object : Runnable {
+        override fun run() {
+            val gatt = bluetoothGatt ?: return
+            if (readBatteryLevel(gatt)) {
+                handler.postDelayed(this, BATTERY_REFRESH_INTERVAL_MS)
+            }
+        }
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -267,7 +278,7 @@ class BleConnectionManager(
         if (status == BluetoothGatt.GATT_SUCCESS) {
             Log.i(TAG, "Notifications enabled successfully")
             listener.onButtonsReady()
-            readBatteryLevel(gatt)
+            startBatteryRefresh()
         } else {
             // CCCD write failed: GATT is still connected but buttons won't fire.
             // Force disconnect so the standard reconnect path runs — otherwise
@@ -291,29 +302,40 @@ class BleConnectionManager(
             Log.w(TAG, "Battery level read failed (status=$status)")
             return
         }
-        Log.i(TAG, "Housing battery: $percent%")
+        Log.d(TAG, "Housing battery: $percent%")
         listener.onBatteryLevel(percent)
     }
 
     /**
-     * One read of the standard Battery Service. The housing battery lasts
-     * several dives, so a value per connection is enough — no notifications,
-     * no polling. A housing without the service simply shows no level.
+     * Read the battery level now and then every [BATTERY_REFRESH_INTERVAL_MS].
+     * A single read is not enough: after the housing boots, its firmware
+     * reports a placeholder 100 % until its first real measurement (observed:
+     * 100 % after a housing restart, 93 % on a reconnect without restart).
+     * The periodic read replaces that placeholder within about a minute.
      */
-    private fun readBatteryLevel(gatt: BluetoothGatt) {
+    private fun startBatteryRefresh() {
+        handler.removeCallbacks(batteryRefreshRunnable)
+        batteryRefreshRunnable.run()
+    }
+
+    /**
+     * One read of the standard Battery Service. Returns false when the
+     * housing has no such service — it then simply shows no level and the
+     * refresh stops. A refused read (another characteristic/descriptor
+     * operation outstanding; RSSI reads do not count) is retried by the next
+     * refresh.
+     */
+    private fun readBatteryLevel(gatt: BluetoothGatt): Boolean {
         val characteristic = gatt.getService(BATTERY_SERVICE_UUID)
             ?.getCharacteristic(BATTERY_LEVEL_UUID)
         if (characteristic == null) {
             Log.i(TAG, "No battery service; housing offers: ${gatt.services.map { it.uuid }}")
-            return
+            return false
         }
-        // Called right after the CCCD write completed, so no other
-        // characteristic/descriptor operation is outstanding (RSSI reads do
-        // not count) and the request is accepted. A refusal costs only the
-        // level display — no retry.
         if (!gatt.readCharacteristic(characteristic)) {
             Log.w(TAG, "Battery level read refused")
         }
+        return true
     }
 
     private fun handleRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
@@ -344,6 +366,7 @@ class BleConnectionManager(
 
         handler.removeCallbacks(serviceDiscoveryStartRunnable)
         handler.removeCallbacks(serviceDiscoveryTimeoutRunnable)
+        handler.removeCallbacks(batteryRefreshRunnable)
         stopConnectionMonitoring()
         listener.onDisconnected()
         gatt.close()
@@ -453,6 +476,7 @@ class BleConnectionManager(
      */
     fun release() {
         cancelPendingReconnect()
+        handler.removeCallbacks(batteryRefreshRunnable)
         stopScan()
         stopConnectionMonitoring()
         bluetoothGatt?.let {
@@ -562,7 +586,7 @@ class BleConnectionManager(
         } else {
             Log.w(TAG, "CCCD descriptor not found, notifications may not work")
             reportWithDetail(ConnectionStatus.Ready, "Connected (no CCCD)")
-            readBatteryLevel(gatt)
+            startBatteryRefresh()
         }
     }
 
@@ -691,6 +715,9 @@ class BleConnectionManager(
         // Standard Battery Service / Battery Level characteristic
         private val BATTERY_SERVICE_UUID: UUID = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
         private val BATTERY_LEVEL_UUID: UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
+
+        // Battery level re-read cadence while connected.
+        private const val BATTERY_REFRESH_INTERVAL_MS = 60_000L
 
         // Client Characteristic Configuration Descriptor (for enabling notifications)
         private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")

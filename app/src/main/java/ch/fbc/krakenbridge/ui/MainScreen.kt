@@ -355,7 +355,7 @@ private fun StatusChip(
     }
 }
 
-// Housing battery, read once per connection — part of the housing state, so
+// Housing battery, refreshed every minute — part of the housing state, so
 // it sits under the status word rather than with the phone-state chips.
 // Amber below LOW_BATTERY_PERCENT as a "charge before the dive" hint.
 @Composable
