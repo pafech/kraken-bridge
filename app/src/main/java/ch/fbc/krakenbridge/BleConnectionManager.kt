@@ -83,7 +83,7 @@ class BleConnectionManager(
         /** A housing button notification arrived (Binder thread). */
         fun onButtonEvent(code: Int)
 
-        /** Housing battery level (0–100 %), read on connect and on each housing update. */
+        /** Housing battery level (0–100 %), read once per connection (re-read once if 100 %). */
         fun onBatteryLevel(percent: Int)
     }
 
@@ -138,6 +138,13 @@ class BleConnectionManager(
         gatt.discoverServices()
     }
 
+    // True once the placeholder re-check of the current link is scheduled.
+    private var isBatteryRecheck = false
+
+    private val batteryRecheckRunnable = Runnable {
+        bluetoothGatt?.let { readBatteryLevel(it) }
+    }
+
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
@@ -177,9 +184,6 @@ class BleConnectionManager(
             value: ByteArray
         ) {
             extractButtonCode(characteristic, value)?.let { listener.onButtonEvent(it) }
-            if (characteristic.uuid == BATTERY_LEVEL_UUID) {
-                handler.post { handleBatteryLevel(gatt, value, "notified") }
-            }
         }
 
         // Legacy callback for API < 33 — those releases never invoke the
@@ -192,10 +196,6 @@ class BleConnectionManager(
             characteristic: BluetoothGattCharacteristic
         ) {
             extractButtonCode(characteristic, characteristic.value)?.let { listener.onButtonEvent(it) }
-            if (characteristic.uuid == BATTERY_LEVEL_UUID) {
-                val value = characteristic.value?.copyOf()
-                handler.post { handleBatteryLevel(gatt, value, "notified") }
-            }
         }
 
         override fun onDescriptorWrite(
@@ -203,8 +203,7 @@ class BleConnectionManager(
             descriptor: BluetoothGattDescriptor,
             status: Int
         ) {
-            val characteristicUuid = descriptor.characteristic.uuid
-            handler.post { handleDescriptorWrite(gatt, characteristicUuid, status) }
+            handler.post { handleDescriptorWrite(gatt, status) }
         }
 
         override fun onCharacteristicRead(
@@ -271,16 +270,11 @@ class BleConnectionManager(
         }
     }
 
-    private fun handleDescriptorWrite(gatt: BluetoothGatt, characteristicUuid: UUID, status: Int) {
-        if (characteristicUuid == BATTERY_LEVEL_UUID) {
-            // Battery updates are a nice-to-have: a failure leaves the read value.
-            Log.i(TAG, "Battery level notifications ${if (status == BluetoothGatt.GATT_SUCCESS) "enabled" else "failed (status=$status)"}")
-            return
-        }
+    private fun handleDescriptorWrite(gatt: BluetoothGatt, status: Int) {
         if (status == BluetoothGatt.GATT_SUCCESS) {
             Log.i(TAG, "Notifications enabled successfully")
             listener.onButtonsReady()
-            readBatteryLevel(gatt)
+            startBatteryRead(gatt)
         } else {
             // CCCD write failed: GATT is still connected but buttons won't fire.
             // Force disconnect so the standard reconnect path runs — otherwise
@@ -297,33 +291,30 @@ class BleConnectionManager(
         value: ByteArray?,
         status: Int
     ) {
+        // A late read from a GATT we no longer own must not set the level.
         if (gatt !== bluetoothGatt || characteristic.uuid != BATTERY_LEVEL_UUID) return
-        if (status != BluetoothGatt.GATT_SUCCESS) {
+        val percent = batteryPercentFrom(value)
+        if (status != BluetoothGatt.GATT_SUCCESS || percent == null) {
             Log.w(TAG, "Battery level read failed (status=$status)")
             return
         }
-        handleBatteryLevel(gatt, value, "read")
-        // The read is done, so the GATT is free for the subscription write.
-        subscribeBatteryLevel(gatt, characteristic)
-    }
-
-    /** A battery value from the initial read or a notification. */
-    private fun handleBatteryLevel(gatt: BluetoothGatt, value: ByteArray?, source: String) {
-        // A late value from a GATT we no longer own must not set the level.
-        if (gatt !== bluetoothGatt) return
-        val percent = batteryPercentFrom(value)
-        if (percent == null) {
-            Log.w(TAG, "Invalid battery level ($source)")
+        Log.i(TAG, "Housing battery: $percent%")
+        if (percent == PLACEHOLDER_BATTERY_PERCENT && !isBatteryRecheck) {
+            // After a boot the housing reports a placeholder 100 % until its
+            // first real measurement (observed: 100 % after a housing restart,
+            // 93 % on a reconnect without restart). Show nothing yet and read
+            // again; the second value is shown whatever it is, so a genuinely
+            // full battery appears after the delay.
+            isBatteryRecheck = true
+            handler.postDelayed(batteryRecheckRunnable, BATTERY_RECHECK_DELAY_MS)
             return
         }
-        Log.i(TAG, "Housing battery: $percent% ($source)")
         listener.onBatteryLevel(percent)
     }
 
     /**
-     * Initial read of the standard Battery Service, followed by a
-     * subscription (see [subscribeBatteryLevel]). A housing without the
-     * service simply shows no level.
+     * Read the standard Battery Service. A housing without the service
+     * simply shows no level.
      */
     private fun readBatteryLevel(gatt: BluetoothGatt) {
         val characteristic = gatt.getService(BATTERY_SERVICE_UUID)
@@ -332,33 +323,18 @@ class BleConnectionManager(
             Log.i(TAG, "No battery service; housing offers: ${gatt.services.map { it.uuid }}")
             return
         }
-        // Called right after the button CCCD write completed, so no other
-        // characteristic/descriptor operation is outstanding (RSSI reads do
-        // not count). A refusal costs only the level display.
+        // No other characteristic/descriptor operation is outstanding here
+        // (RSSI reads do not count). A refusal costs only the level display.
         if (!gatt.readCharacteristic(characteristic)) {
             Log.w(TAG, "Battery level read refused")
         }
     }
 
-    /**
-     * After the housing boots, its firmware reports a placeholder 100 % until
-     * its first real measurement (observed: 100 % after a housing restart,
-     * 93 % on a reconnect without restart). Subscribing lets the housing push
-     * the real value the moment it has measured — while the diver is still
-     * on the main screen — without any polling.
-     */
-    private fun subscribeBatteryLevel(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-        if (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY == 0) {
-            Log.i(TAG, "Battery level offers no notifications (properties=0x${characteristic.properties.toString(16)})")
-            return
-        }
-        val descriptor = characteristic.getDescriptor(CCCD_UUID)
-        if (descriptor == null) {
-            Log.w(TAG, "Battery level CCCD not found")
-            return
-        }
-        gatt.setCharacteristicNotification(characteristic, true)
-        writeNotificationCccd(gatt, descriptor)
+    /** First battery read of a link; resets the placeholder re-check. */
+    private fun startBatteryRead(gatt: BluetoothGatt) {
+        handler.removeCallbacks(batteryRecheckRunnable)
+        isBatteryRecheck = false
+        readBatteryLevel(gatt)
     }
 
     private fun handleRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
@@ -389,6 +365,7 @@ class BleConnectionManager(
 
         handler.removeCallbacks(serviceDiscoveryStartRunnable)
         handler.removeCallbacks(serviceDiscoveryTimeoutRunnable)
+        handler.removeCallbacks(batteryRecheckRunnable)
         stopConnectionMonitoring()
         listener.onDisconnected()
         gatt.close()
@@ -498,6 +475,7 @@ class BleConnectionManager(
      */
     fun release() {
         cancelPendingReconnect()
+        handler.removeCallbacks(batteryRecheckRunnable)
         stopScan()
         stopConnectionMonitoring()
         bluetoothGatt?.let {
@@ -596,23 +574,18 @@ class BleConnectionManager(
         // Write to CCCD to enable remote notifications
         val descriptor = characteristic.getDescriptor(CCCD_UUID)
         if (descriptor != null) {
-            writeNotificationCccd(gatt, descriptor)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+            } else {
+                @Suppress("DEPRECATION")
+                descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                @Suppress("DEPRECATION")
+                gatt.writeDescriptor(descriptor)
+            }
         } else {
             Log.w(TAG, "CCCD descriptor not found, notifications may not work")
             reportWithDetail(ConnectionStatus.Ready, "Connected (no CCCD)")
-            readBatteryLevel(gatt)
-        }
-    }
-
-    /** Enable remote notifications; the result arrives in onDescriptorWrite. */
-    private fun writeNotificationCccd(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-        } else {
-            @Suppress("DEPRECATION")
-            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            @Suppress("DEPRECATION")
-            gatt.writeDescriptor(descriptor)
+            startBatteryRead(gatt)
         }
     }
 
@@ -741,6 +714,11 @@ class BleConnectionManager(
         // Standard Battery Service / Battery Level characteristic
         private val BATTERY_SERVICE_UUID: UUID = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
         private val BATTERY_LEVEL_UUID: UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
+
+        // The value the housing reports before its first measurement, and
+        // how long after such a read the level is read again.
+        private const val PLACEHOLDER_BATTERY_PERCENT = 100
+        private const val BATTERY_RECHECK_DELAY_MS = 5_000L
 
         // Client Characteristic Configuration Descriptor (for enabling notifications)
         private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
