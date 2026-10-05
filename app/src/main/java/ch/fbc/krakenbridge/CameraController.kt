@@ -129,9 +129,35 @@ class CameraController(
      * happen to align.
      */
     fun resumeFromGallery() {
+        reopenCamera()
+        Log.i(TAG, "Switched back to CAMERA mode")
+    }
+
+    /** Cover the idle camera so it pauses and releases the sensor. */
+    fun parkIfIdle() {
+        val current = state.value
+        if (current.isGalleryMode || current.isRecording || current.isCameraParked ||
+            !current.isCameraOpen || !isCameraForeground()
+        ) return
+
+        state.update { it.withCameraParked() }
+        context.startActivity(
+            Intent(context, KrakenStandbyActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+        updateNotification("Standby - press any button to resume")
+        Log.i(TAG, "Idle -> camera parked behind standby screen")
+    }
+
+    fun resumeFromStandby() {
+        state.update { it.withCameraUnparked() }
+        reopenCamera()
+        Log.i(TAG, "Standby -> camera reopened")
+    }
+
+    private fun reopenCamera() {
         openCamera()
         updateNotification(state.value.readyMessage)
-        Log.i(TAG, "Switched back to CAMERA mode")
         handler.postDelayed({
             swipeToSwitchCameraMode(state.value.isVideoMode)
         }, MODE_SWIPE_DELAY_MS)

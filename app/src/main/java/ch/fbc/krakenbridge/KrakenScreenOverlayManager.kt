@@ -35,6 +35,7 @@ import android.view.WindowManager
  *     power: BRIGHTNESS_OVERRIDE_NONE (-1) follows the user's preferred
  *     brightness; 0f drops the backlight to its hardware minimum (on OLED
  *     this is effectively black at near-zero power).
+ *   - [onIdleDim] runs on the main thread after each dim.
  *   - Housing buttons go through [consumeWakeIfDim]; system user-presence
  *     broadcasts (screen on, unlock) call [onUserActivity]. Both restore
  *     brightness immediately and reset the idle timer. A touch on the
@@ -51,7 +52,10 @@ import android.view.WindowManager
  *   walkthrough in [MainActivity] requests it; [start] is a no-op if it
  *   was revoked.
  */
-class KrakenScreenOverlayManager(private val context: Context) {
+class KrakenScreenOverlayManager(
+    private val context: Context,
+    private val onIdleDim: () -> Unit = {}
+) {
 
     private val windowManager =
         context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -236,7 +240,9 @@ class KrakenScreenOverlayManager(private val context: Context) {
             Log.d(TAG, "Overlay dimmed (idle)")
         } catch (e: Exception) {
             Log.w(TAG, "updateViewLayout failed on dim", e)
+            return
         }
+        onIdleDim()
     }
 
     // ── Test-only hooks ──────────────────────────────────────────────────────

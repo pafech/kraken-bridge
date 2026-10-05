@@ -95,6 +95,14 @@
             tools:targetApi="27"
             android:theme="@style/Theme.KrakenBridge.Wake"/>
 
+        <activity
+            android:name=".KrakenStandbyActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:theme="@style/Theme.KrakenBridge.Standby"/>
+
         <service
             android:name=".KrakenBleService"
             android:enabled="true"
