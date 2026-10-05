@@ -420,6 +420,12 @@ class KrakenBleService : Service() {
 
     // ────────────────────────────────────────────────────────────────────────
 
+    /** A tap on the standby screen: leave standby without reopening the camera. */
+    fun leaveStandby() {
+        mutableState.update { it.withCameraUnparked() }
+        notifyUserActivity()
+    }
+
     /**
      * Called from [screenStateReceiver] when the system surfaces a
      * user-presence event (screen on, unlock). Restores the overlay's
