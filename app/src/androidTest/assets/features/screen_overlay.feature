@@ -82,3 +82,13 @@ Feature: Screen overlay keeps the dive accessible without a lockscreen
     Then the camera is no longer parked
     And the camera is in the foreground
     And the capture mode is still photo
+
+  @manual
+  Scenario: A tap on the standby screen opens the app
+    Given the overlay is attached
+    And the camera is open in the foreground
+    And the overlay dims
+    When the standby screen is tapped
+    Then the camera is no longer parked
+    And the app screen is in the foreground
+    And the overlay brightness is back at the bright level

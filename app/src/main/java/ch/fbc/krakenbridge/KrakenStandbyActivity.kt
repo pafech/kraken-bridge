@@ -1,5 +1,6 @@
 package ch.fbc.krakenbridge
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
@@ -20,6 +21,11 @@ class KrakenStandbyActivity : ComponentActivity() {
                 gravity = Gravity.CENTER
                 setTextColor(Color.LTGRAY)
                 textSize = 22f
+                setOnClickListener {
+                    KrakenBleService.instance?.leaveStandby()
+                    startActivity(Intent(context, MainActivity::class.java))
+                    finish()
+                }
             }
         )
         lifecycleScope.launch {

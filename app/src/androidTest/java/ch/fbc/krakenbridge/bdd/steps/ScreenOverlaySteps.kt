@@ -2,6 +2,7 @@ package ch.fbc.krakenbridge.bdd.steps
 
 import android.content.Intent
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import ch.fbc.krakenbridge.BTN_FN_PRESS
 import ch.fbc.krakenbridge.BTN_SHUTTER_PRESS
 import ch.fbc.krakenbridge.FeatureRepository
@@ -227,6 +228,21 @@ class ScreenOverlaySteps {
         val service = KrakenBleService.instance ?: error("Service not running")
         service.simulateButtonPress(BTN_FN_PRESS)
         Thread.sleep(1500)
+    }
+
+    @When("the standby screen is tapped")
+    fun tapStandby() {
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.click(device.displayWidth / 2, device.displayHeight / 2)
+        Thread.sleep(1500)
+    }
+
+    @Then("the app screen is in the foreground")
+    fun assertAppForeground() {
+        val foreground = KrakenAccessibilityService.instance?.currentForegroundPackage
+        check(foreground == context.packageName) {
+            "Expected the app in front but was $foreground"
+        }
     }
 
     @Then("the camera is parked behind the standby screen")

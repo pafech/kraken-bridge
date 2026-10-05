@@ -145,7 +145,6 @@ class CameraController(
             Intent(context, KrakenStandbyActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
-        updateNotification("Standby - press any button to resume")
         Log.i(TAG, "Idle -> camera parked behind standby screen")
     }
 
