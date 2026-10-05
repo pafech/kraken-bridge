@@ -5,6 +5,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import ch.fbc.krakenbridge.BTN_FN_PRESS
 import ch.fbc.krakenbridge.BTN_SHUTTER_PRESS
 import ch.fbc.krakenbridge.FeatureRepository
+import ch.fbc.krakenbridge.KrakenAccessibilityService
 import ch.fbc.krakenbridge.KrakenBleService
 import io.cucumber.java.en.Given
 import io.cucumber.java.en.Then
@@ -202,6 +203,58 @@ class ScreenOverlaySteps {
         KrakenBleService.instance ?: error("Service not running")
         check(!KrakenBleService.state.value.isCameraOpen) {
             "Camera-open flag was set — wake-tap was not absorbed"
+        }
+    }
+
+    @Given("the camera is open in the foreground")
+    fun ensureCameraForeground() {
+        val service = KrakenBleService.instance ?: error("Service not running")
+        if (!KrakenBleService.state.value.isCameraOpen) {
+            service.simulateButtonPress(BTN_SHUTTER_PRESS)
+            Thread.sleep(1500)
+        }
+        assertCameraForeground()
+    }
+
+    @When("the overlay dims")
+    fun dimOverlay() {
+        KrakenBleService.instance!!.testOverlayManager!!.testForceDim()
+        Thread.sleep(1000)
+    }
+
+    @When("the Fn button is pressed")
+    fun pressFn() {
+        val service = KrakenBleService.instance ?: error("Service not running")
+        service.simulateButtonPress(BTN_FN_PRESS)
+        Thread.sleep(1500)
+    }
+
+    @Then("the camera is parked behind the standby screen")
+    fun assertCameraParked() {
+        check(KrakenBleService.state.value.isCameraParked) { "Camera is not parked" }
+        val foreground = KrakenAccessibilityService.instance?.currentForegroundPackage
+        check(foreground == context.packageName) {
+            "Expected the standby screen in front but was $foreground"
+        }
+    }
+
+    @Then("the camera is no longer parked")
+    fun assertCameraNotParked() {
+        check(!KrakenBleService.state.value.isCameraParked) { "Camera is still parked" }
+    }
+
+    @Then("the camera is in the foreground")
+    fun assertCameraForeground() {
+        val foreground = KrakenAccessibilityService.instance?.currentForegroundPackage
+        check(foreground != null && foreground != context.packageName) {
+            "Expected the camera in front but was $foreground"
+        }
+    }
+
+    @Then("the capture mode is still photo")
+    fun assertPhotoMode() {
+        check(!KrakenBleService.state.value.isVideoMode) {
+            "The resume press toggled the capture mode — it was not absorbed"
         }
     }
 }

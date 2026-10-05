@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">Kraken Dive Photo</string>
     <string name="accessibility_service_description">Kraken Dive Photo uses this service to send button presses from your Kraken dive housing to your camera and gallery apps. The housing buttons then take photos and videos, set the focus, and browse or delete photos in your gallery.</string>
+    <string name="standby_message">Standby\nPress any button to resume</string>
 </resources>

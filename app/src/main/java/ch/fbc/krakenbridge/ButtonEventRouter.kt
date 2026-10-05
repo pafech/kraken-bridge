@@ -38,7 +38,16 @@ class ButtonEventRouter(
         // this, the diver who's been observing a subject for a minute
         // would lose their composed shot to a wake-tap that fired the
         // shutter immediately.
-        if (overlayManager.consumeWakeIfDim()) {
+        val wasDim = overlayManager.consumeWakeIfDim()
+
+        // Independent of dim: an unlock restores brightness but not the camera.
+        if (state.value.isCameraParked) {
+            Log.d(TAG, "Button absorbed: reopening camera from standby")
+            cameraController.resumeFromStandby()
+            return
+        }
+
+        if (wasDim) {
             Log.d(TAG, "Button absorbed as wake-tap (overlay was dim)")
             return
         }

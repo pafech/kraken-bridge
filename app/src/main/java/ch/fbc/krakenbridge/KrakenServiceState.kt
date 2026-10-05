@@ -42,6 +42,8 @@ data class KrakenServiceState(
     val isRecording: Boolean = false,
     /** Whether the camera app has been opened at least once this session. */
     val isCameraOpen: Boolean = false,
+    /** The standby screen covers the camera so it releases the sensor. */
+    val isCameraParked: Boolean = false,
     /** Housing battery level in percent; null when unknown or not connected. */
     val batteryPercent: Int? = null,
     /**
@@ -85,12 +87,19 @@ data class KrakenServiceState(
         return copy(isGalleryMode = toGallery, isCameraOpen = !toGallery)
     }
 
+    /** Idle dim in camera mode. */
+    fun withCameraParked(): KrakenServiceState = copy(isCameraParked = true)
+
+    /** Any button press while parked. */
+    fun withCameraUnparked(): KrakenServiceState = copy(isCameraParked = false)
+
     /** ACTION_CONNECT: a new session starts with every flag cleared. */
     fun freshSession(): KrakenServiceState = copy(
         isVideoMode = false,
         isGalleryMode = false,
         isRecording = false,
-        isCameraOpen = false
+        isCameraOpen = false,
+        isCameraParked = false
     )
 
     /**
@@ -102,6 +111,7 @@ data class KrakenServiceState(
         isGalleryMode = false,
         isRecording = false,
         isCameraOpen = false,
+        isCameraParked = false,
         batteryPercent = null,
         isBatteryPending = false
     )

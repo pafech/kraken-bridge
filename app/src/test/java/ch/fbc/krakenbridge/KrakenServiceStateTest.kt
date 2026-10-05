@@ -66,11 +66,21 @@ class KrakenServiceStateTest {
     }
 
     @Test
+    fun `standby round-trip keeps the camera session and capture mode`() {
+        val video = KrakenServiceState(isVideoMode = true, isCameraOpen = true)
+        val parked = video.withCameraParked()
+        assertTrue(parked.isCameraParked)
+        assertEquals(video, parked.withCameraUnparked())
+    }
+
+    @Test
     fun `fresh session clears every session flag`() {
         val messy = KrakenServiceState(
-            isVideoMode = true, isGalleryMode = true, isRecording = true, isCameraOpen = true
+            isVideoMode = true, isGalleryMode = true, isRecording = true, isCameraOpen = true,
+            isCameraParked = true
         )
         val fresh = messy.freshSession()
+        assertFalse(fresh.isCameraParked)
         assertFalse(fresh.isVideoMode)
         assertFalse(fresh.isGalleryMode)
         assertFalse(fresh.isRecording)
@@ -92,13 +102,14 @@ class KrakenServiceStateTest {
     fun `session release keeps the capture mode for a sticky restart`() {
         val video = KrakenServiceState(
             isVideoMode = true, isGalleryMode = true, isRecording = true, isCameraOpen = true,
-            batteryPercent = 80, isBatteryPending = true
+            isCameraParked = true, batteryPercent = 80, isBatteryPending = true
         )
         val released = video.sessionReleased()
         assertTrue("capture mode survives teardown", released.isVideoMode)
         assertFalse(released.isGalleryMode)
         assertFalse(released.isRecording)
         assertFalse(released.isCameraOpen)
+        assertFalse(released.isCameraParked)
         assertNull(released.batteryPercent)
         assertFalse(released.isBatteryPending)
     }

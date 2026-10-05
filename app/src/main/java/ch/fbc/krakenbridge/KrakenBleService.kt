@@ -152,7 +152,7 @@ class KrakenBleService : Service() {
         powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         featureRepo = FeatureRepository(this)
         prefs = KrakenPreferences(this)
-        overlayManager = KrakenScreenOverlayManager(this)
+        overlayManager = KrakenScreenOverlayManager(this) { cameraController.parkIfIdle() }
         wakeLocks = WakeLockHolder(powerManager) { held ->
             // A running recording must never dim mid-shot; the video wake
             // lock's lifetime defines the overlay's keep-bright window.

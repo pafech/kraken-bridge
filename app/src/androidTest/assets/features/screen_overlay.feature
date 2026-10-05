@@ -65,3 +65,20 @@ Feature: Screen overlay keeps the dive accessible without a lockscreen
     When the shutter button is pressed
     Then the overlay brightness is back at the bright level
     And the camera-open flag is still cleared
+
+  @manual
+  Scenario: Dimming parks the camera behind the standby screen
+    Given the overlay is attached
+    And the camera is open in the foreground
+    When the overlay dims
+    Then the camera is parked behind the standby screen
+
+  @manual
+  Scenario: Any button press brings the camera back from standby
+    Given the overlay is attached
+    And the camera is open in the foreground
+    And the overlay dims
+    When the Fn button is pressed
+    Then the camera is no longer parked
+    And the camera is in the foreground
+    And the capture mode is still photo
