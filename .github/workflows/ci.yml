@@ -43,7 +43,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -71,7 +71,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -107,7 +107,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -145,7 +145,7 @@ jobs:
         # An unsigned build (no keystore) is not shippable, so it is not
         # offered; neither is the build of the release gate (see the header).
         if: env.KEYSTORE_PATH != '' && github.workflow == 'CI'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kraken-bridge-${{ env.VERSION_NAME }}-apk
           path: app/build/outputs/apk/release/*.apk
@@ -153,7 +153,7 @@ jobs:
 
       - name: Upload release AAB
         if: env.KEYSTORE_PATH != '' && github.workflow == 'CI'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kraken-bridge-${{ env.VERSION_NAME }}-playstore-aab
           path: app/build/outputs/bundle/release/*.aab
@@ -184,7 +184,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - name: Enable KVM for hardware acceleration
         # Required for x86_64 emulator on Linux GitHub Actions runners
@@ -213,7 +213,7 @@ jobs:
       # by the time any later step runs.
       - name: Upload BDD test results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bdd-test-results-${{ github.sha }}
           path: bdd-reports/
