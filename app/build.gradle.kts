@@ -136,7 +136,7 @@ dependencies {
     // Cucumber-Android: Gherkin BDD runner. Features live in
     // src/androidTest/assets/features/; step definitions are auto-discovered
     // in the test APK via annotation scanning. Cucumber pulls junit transitively.
-    androidTestImplementation("io.cucumber:cucumber-android:7.18.1")
+    androidTestImplementation("io.cucumber:cucumber-android:7.19.0")
 
     // InstrumentationRegistry — used by step definitions to obtain the target
     // context and uiAutomation handle.
