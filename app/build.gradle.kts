@@ -100,6 +100,9 @@ android {
         // red on days when nothing here changed. Dependabot owns dependency
         // freshness (weekly grouped PRs); lint does not need to police it too.
         disable += "GradleDependency"
+        // AndroidGradlePluginVersion does the same for the Gradle wrapper and
+        // AGP: each upstream release turned main red. Dependabot owns it too.
+        disable += "AndroidGradlePluginVersion"
         // Lint is a CI gate: any new warning fails the build. Deliberate
         // exceptions get a reasoned disable above — never a silent baseline.
         warningsAsErrors = true
