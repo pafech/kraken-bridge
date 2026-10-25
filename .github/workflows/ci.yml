@@ -16,9 +16,19 @@ name: CI
 on:
   push:
     branches: ["main"]
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
     branches: ["main"]
+    paths-ignore: ['**.md', 'docs/**']
   workflow_call:
+
+# A new push to a pull request cancels its older run. Runs on main queue and
+# finish, so every main commit keeps its build. The `-ci` suffix keeps the
+# group apart from a caller's: release.yml calls this workflow, and there
+# github.workflow is the caller's name.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-ci
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -168,10 +178,11 @@ jobs:
   # Uses a debug build because R8 minification (enabled in release) would
   # break instrumentation test discovery and accessibility-tree assertions.
   # The release artifact correctness is covered by Job 1 (assembleRelease).
+  # No `needs`: it builds its own debug APKs, so it runs next to the build
+  # job instead of after it.
   bdd-tests:
     name: BDD instrumented tests
     runs-on: ubuntu-latest
-    needs: build
 
     steps:
       - name: Checkout
@@ -194,6 +205,37 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # Before the emulator starts: Gradle next to the 2-core emulator took
+      # minutes and starved it into ANR dialogs (see run-bdd-tests.sh).
+      - name: Build debug APKs
+        run: ./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
+
+      # The system image download and a cold boot took ~2.5 min per run. The
+      # cache holds both the image and a booted snapshot. Bump the key when
+      # the emulator settings below change.
+      - name: Cache emulator
+        id: emulator-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+            /usr/local/lib/android/sdk/system-images/android-34
+          key: emulator-34-google_apis-x86_64-pixel_6-v1
+
+      - name: Create the emulator snapshot
+        if: steps.emulator-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: false
+          script: echo "Snapshot saved for the next runs."
+
       - name: Run BDD tests on emulator
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
@@ -201,6 +243,9 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          force-avd-creation: false
+          # Boots from the cached snapshot and leaves it clean for the next run.
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           # The script lives in its own file because android-emulator-runner may
           # execute each line as a separate shell invocation, breaking multi-line
           # constructs (if/fi, variable capture, line continuations).

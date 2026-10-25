@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Run BDD instrumented tests on an Android emulator.
-# Called from the CI workflow after the emulator has booted.
+# Called from the CI workflow after the emulator has booted. The workflow
+# builds both APKs before the emulator starts: Gradle next to the 2-core
+# emulator starved it (the ANR and screen-off failures below).
 set -euo pipefail
 
-# Pin the screen on BEFORE the Gradle build. The screen-off timer starts at
+# Pin the screen on first. The screen-off timer starts at
 # emulator boot and nothing else resets it; once the panel sleeps, the
 # foreground activity stops and its accessibility tree empties, so every
 # UiAutomator By.text lookup fails — the UI-driven scenarios go red while
@@ -18,14 +20,11 @@ adb shell svc power stayon true
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell wm dismiss-keyguard
 
-# Suppress crash and ANR dialogs, BEFORE the build. The 2-core emulator
-# starves while Gradle runs next to it, and the Pixel Launcher can hit an
-# ANR. Its "isn't responding" dialog is owned by `android` and stays on top
+# Suppress crash and ANR dialogs. When the 2-core emulator starved (Gradle
+# used to run next to it), the Pixel Launcher hit an ANR. Its "isn't responding" dialog is owned by `android` and stays on top
 # of everything, so MainActivity starts behind it and every disclosure-gate
 # lookup fails with foreground=android (screenshot in run 36404139889).
 adb shell settings put global hide_error_dialogs 1
-
-./gradlew assembleDebug assembleDebugAndroidTest --no-daemon
 
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
