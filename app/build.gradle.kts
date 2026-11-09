@@ -146,5 +146,5 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.7.0")
 
     // UIAutomator — drives the in-app disclosure gate in the BDD scenarios.
-    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.0")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.4.1")
 }
